@@ -25,9 +25,14 @@ implicit none
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
   Real(dp) :: Pond(PlantCount, 14) 
   Integer :: Iper, Iwyr, StartLinSysNum
+  Real(dp) :: PeriodDraft
+  Real(dp) :: HIndIdaho, HIndEast, HIndWest
+  Real(dp) :: HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw
+  Real(dp) :: FedMw, ModW, ModE, ModI
   Real(dp) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
   Real(dp) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
   Character(80) :: SolverFiles(80 * 14)
+  Real(dp) :: Hk(PlantCount), TotalCap
   
   StartProg = MPI_WTime()
 
@@ -56,17 +61,18 @@ implicit none
   StartLinSysNum = StartSys
   Do sys=StartSys, EndSys 
 
-    call GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
-      QOut, SumSpill, AvMw, StartLinSysNum)
-
+    call  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
+      & QOut, SumSpill, AvMw, StartLinSysNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
+      & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
 
     call BuildSolverMatrix(OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-        HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles)
+        HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
     call RunSolver(sys, SolverFiles)
 
-    call OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec)
+    call OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
+      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
     
   End Do
 
@@ -308,7 +314,8 @@ implicit none
     end subroutine
 
     subroutine  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
-      QOut, SumSpill, AvMw, StartLinSysNum)
+      & QOut, SumSpill, AvMw, StartLinSysNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
+      & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
 
       Character(6), Parameter :: NotModWestNames(16) = (/'CUSH 1', 'CUSH 2', 'ALDER ', &
         'LAGRND', 'ROSS  ', 'DIABLO', 'GORGE ', 'U BAKR', 'L BAKR', 'TMTHY ', 'OK GRV', &
@@ -324,20 +331,20 @@ implicit none
       Character(100) :: Line
       Logical :: HeaderDone, PeriodDone, DoneIndIdaho, DoneIndEast, DoneIndWest
       Integer, Intent(Out) :: Iper, Iwyr
-      Real(dp) :: HIndIdaho, HIndEast, HIndWest
+      Real(dp), Intent(Out) :: HIndIdaho, HIndEast, HIndWest
       Character(6) :: TempName 
       Character(1) :: IAstrk
       Real(dp) :: NatQ, TQOut, TJunk, Bypas, Force, TOther, OverG, TAvMw, Fac
-      Real(dp) :: HNotInPnw, TotMw, NotModW, NotModE, StudyMw
+      Real(dp), Intent(Out) :: HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw
       Real(dp) :: Xts
       Character(80) :: FormatString
       Logical :: PlantFound(PlantCount)
-      Real(dp) :: FedMw, ModW, ModE, ModI
+      Real(dp), Intent(Out) :: FedMw, ModW, ModE, ModI
       Integer :: NumFound
       Real(dp), Intent(Out) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
       Real(dp) :: GasCap, DesiredSpillOn, DesiredSpillOff
       Real(dp), Intent(Out) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
-      Real(dp) :: PeriodDraft
+      Real(dp), Intent(Out) :: PeriodDraft
       Logical :: DoneContents
 
       ReguFile = GetFileDef('BPAReguFile')
@@ -414,6 +421,7 @@ implicit none
       HNotInPnw = 0
       FedMw = 0; ModE = 0; ModW = 0; ModI = 0; StudyMw = 0;
       NumFound = 0
+      TotMw = 0
       SpecialOutFile = GetFileDef('OptionStudy') 
       SpecialOutFile = OutputsDir // Trim(SpecialOutFile)
       InfeasOutFile = OutputsDir // 'INFEAS.OUT'
@@ -597,7 +605,7 @@ implicit none
     end subroutine 
 
     subroutine BuildSolverMatrix(OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
       ! This is an assumption that weekday flows are 110% of weekly average flows
       Real(dp), Parameter :: PerWkday = 1.10
@@ -631,7 +639,8 @@ implicit none
 
       Integer :: i, j, k, Eof
       Real(dp) :: OutFac
-      Real(dp) :: Hk(PlantCount), FullGte(PlantCount)
+      Real(dp), Intent(Out) :: Hk(PlantCount)
+      Real(dp) :: FullGte(PlantCount)
       Integer :: HkCurveSeg
       Real(dp) :: F1, F2, Slp
       Real(dp) :: QLpFlow(PlantCount)
@@ -642,6 +651,7 @@ implicit none
       Character(1) :: RowType(PlantCount, MaxProbRows)
       Character(8) :: RowName(PlantCount, MaxProbRows)
       Real(dp) :: OnHr, TotOn, TotOff, NumShdr
+      Real(dp), Intent(Out) :: TotalCap
       Character(8) :: MpsRowName(MaxMpsLines), MpsColName(MaxMpsLines)
       Real(dp) :: MpsRowValue(MaxMpsLines)
       Integer :: MpsLineNum, ColNum, RhsLineNum, BndLineNum
@@ -1061,6 +1071,7 @@ implicit none
       !  it is hopefully more readable as a result.
       !  Note: values not explicitly put into the matrix are assumed to 
       !  be zero by the solver.
+      TotalCap = 0
       Do i = 1, PlantCount
         Write(ColName(ColNum), '(A1,I2.2,A2)') 'W', i, 'TN'
         Write(ColName(ColNum + 1), '(A1,I2.2,A2)') 'W', i, 'SN'
@@ -1068,6 +1079,7 @@ implicit none
         Write(ColName(ColNum + 3), '(A1,I2.2,A2)') 'W', i, 'SF'
         ColNum = ColNum + 4
         If (InStudy(i) .NE. 0) Then
+          TotalCap = TotalCap + Hk(i) * FullGte(i)
           If (Pond(i, Iper) .LE. 0) Then
             ! Since this logic is for large storage projects this
             !  gives the water balance by just weighting the flows by
@@ -1504,17 +1516,21 @@ implicit none
       Write(SolveOutFile, '(A8, "lpout/sys",I4.4,".out")') OutputsDir, sys
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
-    subroutine OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec)
+    subroutine OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
+      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
 
       Integer, Intent(In) :: sys
       Character(6), Intent(In) :: Plnt(PlantCount)
       Integer, Intent(In) :: Iper, Iwyr
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: WindDec(PlantCount, 14)
+      Real(dp), Intent(In) :: HIndIdaho, HIndEast, HIndWest
+      Real(dp), Intent(In) :: NotModE, NotModW, NotModI, ModE, ModW, ModI
+        Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
       
       Character(80) :: NumOnDef
-      Integer :: NumOn, Eof, VarNum, i, j
-      Character(80) :: OutFile, SolveOutFile, InfeasOutFile, FlowForm
+      Integer :: NumOn, Eof, VarNum, i, j, NumOff, NumShdr
+      Character(80) :: OutFile, SolveOutFile, ReservOutFile, FlowForm
       Character(8) :: VarName(PlantCount * 7 * 2)
       Real(dp) :: VarValue(PlantCount * 7 * 2), ObjValue
       Character(100) :: Line
@@ -1524,15 +1540,28 @@ implicit none
       Real(dp) :: GasCapOn, GasCapOff
       Real(dp) :: SpillFac, TargetSpill, PerctSpill, SpillAdd, TotFlow, Diff
       Logical :: AdjustSpill = .FALSE.
+      Real(dp) :: PlantFac, OnGenTemp, OffGenTemp
+      Real(dp) :: EastOnPeakCap, EastOffPeakCap, WestOnPeakCap, WestOffPeakCap
+      Real(dp) :: IdOnPeakCap, IdOffPeakCap
+      Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId
+      Real(dp) :: OtherOnEast, OtherOffEast, OtherOnWest, OtherOffWest
+      Real(dp) :: OtherOnId, OtherOffId
+      Real(dp) :: EnergyOut, PlntFac, PeakFacOther
 
       OutFile = GetFileDef('OutputFile')
       OutFile = OutputsDir // Trim(OutFile)
       Open(Unit=50, File=OutFile, Iostat=Eof)
 
+      ReservOutFile = GetFileDef('ReserveFile')
+      ReservOutFile = OutputsDir // Trim(ReservOutFile)
+      Open(Unit=60, File=ReservOutFile, Status='Unknown')
+
       ! Pull number of peak hours for output
       NumOn = 0
       NumOnDef = trim(GetFileDef('NumberofPkHours'))
       Read(NumOnDef, '(I2)') NumOn
+      NumShdr = 8
+      NumOff = 24 - NumOn - NumShdr 
 
       ! Setup some basic headers
       Write(50, *) 'hours in peak = '
@@ -1562,7 +1591,9 @@ implicit none
           VarHeaderDone = .TRUE.
         End If
       End Do
-      
+
+      EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
+      IdOnPeakCap = 0; IdOffPeakCap = 0;
       Do i = 1, PlantCount
         If (InStudy(i) .NE. 0) Then
           OnTurbPos = 0; OffTurbPos = 0; OnSpillPos = 0; OffSpillPos = 0;
@@ -1683,6 +1714,73 @@ implicit none
               VarValue(OffTurbPos) = VarValue(OffTurbPos) + Diff
             End If
           End If
+
+          ! Now calculate generation after above adjustments
+          If (Plnt(i) .EQ. "KERR  " .OR. Plnt(i) .EQ. "THOM F") Then
+            PlntFac = .32
+          Else
+            PlntFac = 1
+          End If
+          OnGenTemp = VarValue(OnTurbPos) * Hk(i) * PlntFac
+          OffGenTemp = VarValue(OffTurbPos) * Hk(i) * PlntFac
+          ! Calculate flat output for plants that have lags greater than 8
+          If (Plnt(i) .EQ. "LIBBY " .OR. Plnt(i) .EQ. "H HORS" .OR. Plnt(i) .EQ. "DWRSHK") Then
+            OnGenTemp = (OnGenTemp * (NumOn + 4) + OffGenTemp * (NumOff + 4))/24
+            OffGenTemp = OnGenTemp
+          End If
+
+!          If (MFOR .EQ. 1) Then
+!            Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(j), OnGenTemp/1000, OffGenTemp/1000
+!          End If
+  
+          If (InStudy(i) .EQ. 1) Then
+            EastOnPeakCap = EastOnPeakCap + OnGenTemp
+            EastOffPeakCap = EastOffPeakCap + OffGenTemp
+          Else If (InStudy(i) .EQ. 2) Then
+            WestOnPeakCap = WestOnPeakCap + OnGenTemp
+            WestOffPeakCap = WestOffPeakCap + OffGenTemp
+          Else If (InStudy(i) .EQ. 3) Then
+            IdOnPeakCap = IdOnPeakCap + OnGenTemp
+            IdOffPeakCap = IdOffPeakCap + OffGenTemp
+          End If
+
+          ! Now to add in other generation
+          ! From Mike:
+          !  There is an explicit assumption here that 50% of the "other" generation
+          !   will follow load and 50% is flat.  The load factor is fixed
+          !   at 1.087 for a 10 hr peak in the following code. "Other" generation is
+          !   described next.
+          !
+          !   To do the West - East - Idaho divide a variety of assumptions were made.
+          !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
+          !   2) The hydro projects modeled in the regulator as in the region but
+          !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
+          PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
+          OtherGenWest = NotModW + HIndWest
+          OtherGenEast = NotModE + HIndEast
+          OtherGenId = NotModI + HIndIdaho
+          OtherOnWest = OtherGenWest * PeakFacOther
+          OtherOffWest = (OtherGenWest * 24 - OtherOnWest * 14)/10
+          OtherOnEast = OtherGenEast * PeakFacOther
+          OtherOffEast = (OtherGenEast * 24 - OtherOnEast * 14)/10
+          OtherOnId = OtherGenId * PeakFacOther
+          OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
+          Print *, TotMw, HNotInPnw, HIndWest + HIndEast + HIndIdaho
+          EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
+
+          Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
+            & OtherOnEast + EastOnPeakCap/1000., &
+            & OtherOffEast + EastOffPeakCap/1000., &
+            & ModW + NotModW + HIndWest, &
+            & OtherOnWest + WestOnPeakCap/1000., &
+            & OtherOffWest + WestOffPeakCap/1000., &
+            & ModI + NotModI + HIndIdaho, &
+            & OtherOnId + IdOnPeakCap/1000., &
+            & OtherOffId + IdOffPeakCap/1000., &
+            & Iwyr  
+
+          Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
+
         End If
       End Do
     end subroutine

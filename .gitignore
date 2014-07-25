@@ -1,0 +1,13 @@
+# Compiled Source #
+###################
+trap2
+*.o
+*.so
+
+# Output Data #
+###############
+outputs/*
+
+# Temporary Files #
+###################
+*~
