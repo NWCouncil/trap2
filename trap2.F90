@@ -15,6 +15,7 @@ implicit none
 
   Integer :: rank, comsize, ierr, sys
   Integer :: LocSysCount, StartSys, EndSys
+  Integer :: RegDataNum, OldRegDataNum
   Real(dp) :: StartProg, EndProg
 
   Real(dp) :: OutageProb(14, 4)
@@ -24,14 +25,14 @@ implicit none
   Real(dp) :: HkVsFg(PlantCount, 8)
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
   Real(dp) :: Pond(PlantCount, 14) 
-  Integer :: Iper, Iwyr, StartLinSysNum
+  Integer :: Iper, Iwyr, StartRegDataNum
   Real(dp) :: PeriodDraft
   Real(dp) :: HIndIdaho, HIndEast, HIndWest
   Real(dp) :: HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw
   Real(dp) :: FedMw, ModW, ModE, ModI
   Real(dp) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
   Real(dp) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
-  Character(80) :: SolverFiles(80 * 14)
+  Character(80) :: SolverFiles(80 * 14 * 4)
   Real(dp) :: Hk(PlantCount), TotalCap
   
   StartProg = MPI_WTime()
@@ -47,23 +48,27 @@ implicit none
   call MPI_Comm_size(MPI_COMM_WORLD, comsize, ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
 
-  LocSysCount = 80*14 / comsize
-  If (LocSysCount * comsize .NE. 80*14) Then
+  LocSysCount = 80*14*4 / comsize
+  If (LocSysCount * comsize .NE. 80*14*4) Then
     LocSysCount = LocSysCount + 1
   End If
   StartSys = LocSysCount * rank + 1
   EndSys = StartSys + LocSysCount - 1
   If (rank .EQ. comsize - 1) Then
-    EndSys = 80*14
+    EndSys = 80*14*4
   End If
 
   Print '(A, I2, A, I3.3, A)', 'Started ', comsize, ' processes, system ', rank, ' responded'
-  StartLinSysNum = StartSys
+  StartRegDataNum = floor(real(StartSys - 1)/4) + 1
+  OldRegDataNum = 0
   Do sys=StartSys, EndSys 
-
-    call  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
-      & QOut, SumSpill, AvMw, StartLinSysNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
-      & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
+    RegDataNum = floor(real(sys - 1)/4) + 1
+    If (RegDataNum .NE. OldRegDataNum) Then
+      call  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
+        & QOut, SumSpill, AvMw, StartRegDataNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
+        & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
+      OldRegDataNum = RegDataNum
+    End If
 
     call BuildSolverMatrix(OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
         HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
@@ -314,7 +319,7 @@ implicit none
     end subroutine
 
     subroutine  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
-      & QOut, SumSpill, AvMw, StartLinSysNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
+      & QOut, SumSpill, AvMw, StartRegDataNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
       & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
 
       Character(6), Parameter :: NotModWestNames(16) = (/'CUSH 1', 'CUSH 2', 'ALDER ', &
@@ -325,7 +330,7 @@ implicit none
       Character(6), Intent(In) :: Plnt(PlantCount)
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: QMinIn(PlantCount)
-      Integer, Intent(InOut) :: StartLinSysNum
+      Integer, Intent(InOut) :: StartRegDataNum
       Integer :: i, j, Eof = 0, SysCount
       Character(80) :: ReguFile, InfeasOutFile, SpecialOutFile
       Character(100) :: Line
@@ -357,7 +362,7 @@ implicit none
       End If
 
       !Read and ignore the file until it gets to the right starting point
-      If (StartLinSysNum .GT. 1) Then
+      If (StartRegDataNum .GT. 1) Then
         SysCount = 0
         DoneContents = .FALSE.
         Do While (.NOT. DoneContents .AND. Eof .GE. 0)
@@ -365,11 +370,11 @@ implicit none
           If (Line(1:15) .EQ. 'FINAL OPERATION') Then
             SysCount = SysCount + 1
           End If
-          If (SysCount .GE. StartLinSysNum - 1) Then
+          If (SysCount .GE. StartRegDataNum - 1) Then
             DoneContents = .TRUE.
           End If
         End Do
-        StartLinSysNum = 0
+        StartRegDataNum = 0
       End If
 
       ! This reads the period header from the regu file and extracts a few
@@ -420,6 +425,7 @@ implicit none
       Eof = 0
       HNotInPnw = 0
       FedMw = 0; ModE = 0; ModW = 0; ModI = 0; StudyMw = 0;
+      NotModE = 0; NotModW = 0; NotModI = 0;
       NumFound = 0
       TotMw = 0
       SpecialOutFile = GetFileDef('OptionStudy') 
@@ -638,6 +644,7 @@ implicit none
       Character(80), Intent(Out) :: SolverFiles(80 * 14)
 
       Integer :: i, j, k, Eof
+      Integer :: OutProfile
       Real(dp) :: OutFac
       Real(dp), Intent(Out) :: Hk(PlantCount)
       Real(dp) :: FullGte(PlantCount)
@@ -662,109 +669,109 @@ implicit none
       Logical :: FoundDwnstr
       Real(dp) :: Tterm
 
-      Do i = 1, 4
-        OutFac = 1 - OutageProb(Iper, i)
-        Do j = 1, PlantCount
-          Hk(j) = 0.
-          ! If the outflow is greater than spill then something is going 
-          !  through a turbine.  If there is MW associated then just take
-          !  the HK implied by the BPA regulator.  I.e. Average MW 
-          !  divided by the turbine flow
-          If (QOut(j) - SumSpill(j) .GT. 0 .AND. AvMw(j) .GT. 0.) Then
-            Hk(j) = AvMw(j) / (QOut(j) - SumSpill(j)) * 1000.
-          End If
-          ! If the HK is still zero then set the FullGate or turbine flow
-          !  to be zero as well, i.e. all spill
-          If (Hk(j) .EQ. 0) Then
-            FullGte(j) = 0
-          Else
-            If (HkVsFg(j, 1) .EQ. 0 .OR. Hk(j) .GE. HkVsFg(j, 1)) Then
-              ! Note HK * Flow = MW implies MW / HK = Flow, if you substitue
-              !  plant capacity then this could be interpreted as maximum 
-              !  turbine flow.  Using the minumum of this and the first
-              !  curve segment gives a max turbine flow restriction for the 
-              !  plant and avoids infeasibility problems.
-              FullGte(j) = AMin1(Cap(j)/Hk(j), HkVsFg(j, 2)) * 1000.
-            Else 
-              HkCurveSeg = 1 
-              Do k = 3, 7, 2
-                ! If there is a HK curve for the plant figure out the Full Gate
-                !  for the current HK by where it falls on the HK curve
-                If (HkVsFg(j, k) .NE. 0) Then
-                  If (Hk(j) .LT. HkVsFg(j, k)) Then
-                    HkCurveSeg = k
-                  End If
-                End If
-              End Do
-              ! If you hit the last segment then use the Full Gate from that 
-              !  segment
-              If (HkCurveSeg .EQ. 7 .OR. HkVsFg(j, HkCurveSeg + 2) .EQ. 0) Then
-                FullGte(j) = HkVsFg(j, HkCurveSeg + 1) * 1000
-              Else
-                ! If you are in the middle of the curve use linear
-                !  interpolation to solve for the Full Gate
-                F1 = HkVsFg(j, HkCurveSeg + 2) - HkVsFg(j, HkCurveSeg)
-                F2 = HkVsFg(j, HkCurveSeg + 3) - HkVsFg(j, HkCurveSeg + 1)
-                If (F1 .EQ. 0) Then
-                  Print *, 'Some error in the HK tables for plant = ', k
-                  Stop
-                End If
-                ! Change in Full Gate over change in HK
-                Slp = F2/F1
-                ! This just adjusts Full Gate based on current HK linearly
-                !  from the input  HK Curve
-                FullGte(j) = (Slp * (Hk(j) - HkVsFg(j, HkCurveSeg)) + &
-                  HkVsFg(j, HkCurveSeg + 1)) * 1000
-              End If
-            End If
-          End If
-          ! Now adjust for outages
-          FullGte(j) = FullGte(j) * OutFac
+      OutProfile = Mod(sys - 1, 4) + 1
 
-          ! And input Qout as the starting point for the lp flows
-          QLpFlow(j) = QOut(j)
-        End Do
-
-        ! Now using the flows from the BPA Regulator figure out what the
-        !  incremental flows should be working from the downstream plants
-        !  to the upstream plants.
-        Do j = PlantCount, 2, -1
-          If (Pond(j, Iper) .GE. 0) Then
-            Do k = j-1, 1, -1
-              If (Dwnstr(k) .EQ. Plnt(j) .AND. InStudy(k) .NE. 0 .AND. &
-                Delay(k) .LT. 9.) Then
-
-                QLpFlow(j) = QLpFlow(j) - QLpFlow(k)
-              Else
-                ! These are plants where the downstream plant is more than
-                !  9 hours away.  We assume the downstream plant loses the
-                !  hourly shape of the release from the upstream plant.
-                If ((Plnt(j) .EQ. 'THOM F' .AND. Plnt(k) .EQ. 'BRNLEE') .OR. &
-                  (Plnt(j) .EQ. 'LR.GRN' .AND. Plnt(k) .EQ. 'BRNLEE') .OR. &
-                  (Plnt(j) .EQ. 'LR.GRN' .AND. Plnt(k) .EQ. 'DWRSHK') .OR. &
-                  (Plnt(j) .EQ. 'MCNARY' .AND. Plnt(k) .EQ. 'CHELAN') .OR. &
-                  (Plnt(j) .EQ. 'DALLES' .AND. Plnt(k) .EQ. 'RND B ')) Then
-
-                  QLpFlow(j) = QLpFlow(j) + (PerWkday - 1) * QLpFlow(k)
+      OutFac = 1 - OutageProb(Iper, OutProfile)
+      Do j = 1, PlantCount
+        Hk(j) = 0.
+        ! If the outflow is greater than spill then something is going 
+        !  through a turbine.  If there is MW associated then just take
+        !  the HK implied by the BPA regulator.  I.e. Average MW 
+        !  divided by the turbine flow
+        If (QOut(j) - SumSpill(j) .GT. 0 .AND. AvMw(j) .GT. 0.) Then
+          Hk(j) = AvMw(j) / (QOut(j) - SumSpill(j)) * 1000.
+        End If
+        ! If the HK is still zero then set the FullGate or turbine flow
+        !  to be zero as well, i.e. all spill
+        If (Hk(j) .EQ. 0) Then
+          FullGte(j) = 0
+        Else
+          If (HkVsFg(j, 1) .EQ. 0 .OR. Hk(j) .GE. HkVsFg(j, 1)) Then
+            ! Note HK * Flow = MW implies MW / HK = Flow, if you substitue
+            !  plant capacity then this could be interpreted as maximum 
+            !  turbine flow.  Using the minumum of this and the first
+            !  curve segment gives a max turbine flow restriction for the 
+            !  plant and avoids infeasibility problems.
+            FullGte(j) = AMin1(Cap(j)/Hk(j), HkVsFg(j, 2)) * 1000.
+          Else 
+            HkCurveSeg = 1 
+            Do k = 3, 7, 2
+              ! If there is a HK curve for the plant figure out the Full Gate
+              !  for the current HK by where it falls on the HK curve
+              If (HkVsFg(j, k) .NE. 0) Then
+                If (Hk(j) .LT. HkVsFg(j, k)) Then
+                  HkCurveSeg = k
                 End If
               End If
             End Do
-          Else
-            QLpFlow(j) = QLpFlow(j) * PerWkday
+            ! If you hit the last segment then use the Full Gate from that 
+            !  segment
+            If (HkCurveSeg .EQ. 7 .OR. HkVsFg(j, HkCurveSeg + 2) .EQ. 0) Then
+              FullGte(j) = HkVsFg(j, HkCurveSeg + 1) * 1000
+            Else
+              ! If you are in the middle of the curve use linear
+              !  interpolation to solve for the Full Gate
+              F1 = HkVsFg(j, HkCurveSeg + 2) - HkVsFg(j, HkCurveSeg)
+              F2 = HkVsFg(j, HkCurveSeg + 3) - HkVsFg(j, HkCurveSeg + 1)
+              If (F1 .EQ. 0) Then
+                Print *, 'Some error in the HK tables for plant = ', k
+                Stop
+              End If
+              ! Change in Full Gate over change in HK
+              Slp = F2/F1
+              ! This just adjusts Full Gate based on current HK linearly
+              !  from the input  HK Curve
+              FullGte(j) = (Slp * (Hk(j) - HkVsFg(j, HkCurveSeg)) + &
+                HkVsFg(j, HkCurveSeg + 1)) * 1000
+            End If
           End If
-        End Do
-        ! Pickup the furthest upstream plant for the LP flow array
-        If (Pond(1, Iper) .LT. -0.) Then
-          QLpFlow(1) = QLpFlow(1) * PerWkday
+        End If
+        ! Now adjust for outages
+        FullGte(j) = FullGte(j) * OutFac
+
+        ! And input Qout as the starting point for the lp flows
+        QLpFlow(j) = QOut(j)
+      End Do
+
+      ! Now using the flows from the BPA Regulator figure out what the
+      !  incremental flows should be working from the downstream plants
+      !  to the upstream plants.
+      Do j = PlantCount, 2, -1
+        If (Pond(j, Iper) .GE. 0) Then
+          Do k = j-1, 1, -1
+            If (Dwnstr(k) .EQ. Plnt(j) .AND. InStudy(k) .NE. 0 .AND. &
+              Delay(k) .LT. 9.) Then
+
+              QLpFlow(j) = QLpFlow(j) - QLpFlow(k)
+            Else
+              ! These are plants where the downstream plant is more than
+              !  9 hours away.  We assume the downstream plant loses the
+              !  hourly shape of the release from the upstream plant.
+              If ((Plnt(j) .EQ. 'THOM F' .AND. Plnt(k) .EQ. 'BRNLEE') .OR. &
+                (Plnt(j) .EQ. 'LR.GRN' .AND. Plnt(k) .EQ. 'BRNLEE') .OR. &
+                (Plnt(j) .EQ. 'LR.GRN' .AND. Plnt(k) .EQ. 'DWRSHK') .OR. &
+                (Plnt(j) .EQ. 'MCNARY' .AND. Plnt(k) .EQ. 'CHELAN') .OR. &
+                (Plnt(j) .EQ. 'DALLES' .AND. Plnt(k) .EQ. 'RND B ')) Then
+
+                QLpFlow(j) = QLpFlow(j) + (PerWkday - 1) * QLpFlow(k)
+              End If
+            End If
+          End Do
+        Else
+          QLpFlow(j) = QLpFlow(j) * PerWkday
         End If
       End Do
+      ! Pickup the furthest upstream plant for the LP flow array
+      If (Pond(1, Iper) .LT. -0.) Then
+        QLpFlow(1) = QLpFlow(1) * PerWkday
+      End If
 
       ! Here is where I diverge in strategy from the original trap. Rather
       !  than use a library to solve the problem, I am going to create an 
       !  MPS file that can be read into a command line solver.  This allows
       !  some flexibility if we choose to use different solvers in the
       !  future -- Ben
-      Write(SolverFiles(sys), '(A8,A4,I4.4,I2.2,A4)') OutputsDir, 'mps/', Iwyr, Iper, '.mps'
+      Write(SolverFiles(sys), '(A8,A4,I4.4,I2.2,I1.1,A4)') OutputsDir, 'mps/', Iwyr, Iper, OutProfile, '.mps'
       Open(Unit=99, File=SolverFiles(sys), Status='Unknown')
 
       Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper 
@@ -1564,9 +1571,11 @@ implicit none
       NumOff = 24 - NumOn - NumShdr 
 
       ! Setup some basic headers
-      Write(50, *) 'hours in peak = '
-      Write(50, '(1X, I3)') NumOn 
-      Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   IWY'
+      If (sys .EQ. 1) Then
+        Write(50, *) 'hours in peak = '
+        Write(50, '(1X, I3)') NumOn 
+        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   IWY'
+      End If
 
       ! Read the solver output
       Write(SolveOutFile, '(A8, "lpout/sys",I4.4,".out")') OutputsDir, sys
@@ -1729,9 +1738,9 @@ implicit none
             OffGenTemp = OnGenTemp
           End If
 
-!          If (MFOR .EQ. 1) Then
-!            Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(j), OnGenTemp/1000, OffGenTemp/1000
-!          End If
+          If (Mod(sys, 4) .EQ. 1) Then
+            Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(j), OnGenTemp/1000, OffGenTemp/1000
+          End If
   
           If (InStudy(i) .EQ. 1) Then
             EastOnPeakCap = EastOnPeakCap + OnGenTemp
@@ -1743,45 +1752,45 @@ implicit none
             IdOnPeakCap = IdOnPeakCap + OnGenTemp
             IdOffPeakCap = IdOffPeakCap + OffGenTemp
           End If
-
-          ! Now to add in other generation
-          ! From Mike:
-          !  There is an explicit assumption here that 50% of the "other" generation
-          !   will follow load and 50% is flat.  The load factor is fixed
-          !   at 1.087 for a 10 hr peak in the following code. "Other" generation is
-          !   described next.
-          !
-          !   To do the West - East - Idaho divide a variety of assumptions were made.
-          !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
-          !   2) The hydro projects modeled in the regulator as in the region but
-          !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
-          PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
-          OtherGenWest = NotModW + HIndWest
-          OtherGenEast = NotModE + HIndEast
-          OtherGenId = NotModI + HIndIdaho
-          OtherOnWest = OtherGenWest * PeakFacOther
-          OtherOffWest = (OtherGenWest * 24 - OtherOnWest * 14)/10
-          OtherOnEast = OtherGenEast * PeakFacOther
-          OtherOffEast = (OtherGenEast * 24 - OtherOnEast * 14)/10
-          OtherOnId = OtherGenId * PeakFacOther
-          OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
-          Print *, TotMw, HNotInPnw, HIndWest + HIndEast + HIndIdaho
-          EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
-
-          Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
-            & OtherOnEast + EastOnPeakCap/1000., &
-            & OtherOffEast + EastOffPeakCap/1000., &
-            & ModW + NotModW + HIndWest, &
-            & OtherOnWest + WestOnPeakCap/1000., &
-            & OtherOffWest + WestOffPeakCap/1000., &
-            & ModI + NotModI + HIndIdaho, &
-            & OtherOnId + IdOnPeakCap/1000., &
-            & OtherOffId + IdOffPeakCap/1000., &
-            & Iwyr  
-
-          Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
-
         End If
       End Do
+
+      ! Now to add in other generation
+      ! From Mike:
+      !  There is an explicit assumption here that 50% of the "other" generation
+      !   will follow load and 50% is flat.  The load factor is fixed
+      !   at 1.087 for a 10 hr peak in the following code. "Other" generation is
+      !   described next.
+      !
+      !   To do the West - East - Idaho divide a variety of assumptions were made.
+      !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
+      !   2) The hydro projects modeled in the regulator as in the region but
+      !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
+      PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
+      OtherGenWest = NotModW + HIndWest
+      OtherGenEast = NotModE + HIndEast
+      OtherGenId = NotModI + HIndIdaho
+      OtherOnWest = OtherGenWest * PeakFacOther
+      OtherOffWest = (OtherGenWest * 24 - OtherOnWest * 14)/10
+      OtherOnEast = OtherGenEast * PeakFacOther
+      OtherOffEast = (OtherGenEast * 24 - OtherOnEast * 14)/10
+      OtherOnId = OtherGenId * PeakFacOther
+      OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
+      EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
+
+      Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
+        & OtherOnEast + EastOnPeakCap/1000., &
+        & OtherOffEast + EastOffPeakCap/1000., &
+        & ModW + NotModW + HIndWest, &
+        & OtherOnWest + WestOnPeakCap/1000., &
+        & OtherOffWest + WestOffPeakCap/1000., &
+        & ModI + NotModI + HIndIdaho, &
+        & OtherOnId + IdOnPeakCap/1000., &
+        & OtherOffId + IdOffPeakCap/1000., &
+        & Iwyr  
+
+      Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
+
+      Print *, OtherOnWest
     end subroutine
 end program
