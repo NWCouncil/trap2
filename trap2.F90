@@ -74,7 +74,7 @@ implicit none
         HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
-    call RunSolver(sys, SolverFiles)
+    call RunSolver(Iper, Iwyr, sys, SolverFiles)
 
     call OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
       & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
@@ -641,7 +641,7 @@ implicit none
       Real(dp), Intent(In) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
       Real(dp), Intent(In) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
       Integer, Intent(In) :: sys
-      Character(80), Intent(Out) :: SolverFiles(80 * 14)
+      Character(80), Intent(Out) :: SolverFiles(80 * 14 * 4)
 
       Integer :: i, j, k, Eof
       Integer :: OutProfile
@@ -1236,6 +1236,8 @@ implicit none
 !            RhsRowValue(RhsLineNum) = Pond(i, Iper)
 !            RhsLineNum = RhsLineNum + 1
 !
+            !The below constraint is unneeded with S0, S1 and S2 are restricted
+            ! to be between 0 and Pond -- Ben
 !            MpsRowName(MpsLineNum) = RowName(i, 6)
 !            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
 !            MpsRowValue(MpsLineNum) = -1
@@ -1514,13 +1516,16 @@ implicit none
       Write(99, '(A6)') 'ENDATA'
       Close(99)
     end subroutine
-    subroutine RunSolver(sys, SolverFiles)
+    subroutine RunSolver(Iper, Iwyr, sys, SolverFiles)
 
+      Integer, Intent(Out) :: Iper, Iwyr
       Integer, Intent(In) :: sys
-      Character(80), Intent(In) :: SolverFiles(80 * 14)
+      Character(80), Intent(In) :: SolverFiles(80 * 14 * 4)
+      Integer :: OutProfile
       Character(80) :: SolveOutFile
 
-      Write(SolveOutFile, '(A8, "lpout/sys",I4.4,".out")') OutputsDir, sys
+      OutProfile = Mod(sys - 1, 4) + 1
+      Write(SolveOutFile, '(A8,A4,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
     subroutine OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
