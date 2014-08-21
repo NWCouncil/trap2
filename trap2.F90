@@ -43,7 +43,7 @@ implicit none
 
   ! The following code takes care of the embarassingly parallel part of this problem using some
   !  basic OpenMPI functionality.  This will allow for this code to be split to up to the number
-  !  of processors equal to the number of systems solved, 80 * 14 = 1120 processors as of 7/23/2014 -- Ben
+  !  of processors equal to the number of systems solved, 80 * 14 * 4 = 4480 processors as of 7/23/2014 -- Ben
   call MPI_Init(ierr)
   call MPI_Comm_size(MPI_COMM_WORLD, comsize, ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
@@ -64,29 +64,26 @@ implicit none
   Do sys=StartSys, EndSys 
     RegDataNum = floor(real(sys - 1)/4) + 1
     If (RegDataNum .NE. OldRegDataNum) Then
-      call  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
+      call  GetReguArrays(rank, Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
         & QOut, SumSpill, AvMw, StartRegDataNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
         & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
       OldRegDataNum = RegDataNum
     End If
 
-    call BuildSolverMatrix(OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
+    call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
         HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
-    call RunSolver(Iper, Iwyr, sys, SolverFiles)
+    call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
 
-    call OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
+    call OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
       & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
     
   End Do
 
   call MPI_Finalize(ierr)
 
-  If (rank .EQ. 0) Then
-    call System("rm " // OutputsDir // "allsys.out")
-    call System("cat " // OutputsDir // "lpout/* >> " // OutputsDir // "allsys.out")
-  End If
+  call CombineOutputFiles(rank)
 
   EndProg = MPI_WTime()
   If (rank .EQ. 0) Then
@@ -318,7 +315,7 @@ implicit none
       End If
     end subroutine
 
-    subroutine  GetReguArrays(Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
+    subroutine  GetReguArrays(rank, Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
       & QOut, SumSpill, AvMw, StartRegDataNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
       & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
 
@@ -327,6 +324,7 @@ implicit none
         'NFORK ', 'FRDAY ', 'R MILL', 'MOSSYR', 'MAYFLD'/)
       Character(6), Parameter :: NotModEastNames(7) = (/'POST F', 'UP FLS', 'MON ST', &
         'NINE M', 'LONG L', 'L FALL', 'REREG ' /)
+      Integer, Intent(In) :: rank
       Character(6), Intent(In) :: Plnt(PlantCount)
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: QMinIn(PlantCount)
@@ -429,8 +427,8 @@ implicit none
       NumFound = 0
       TotMw = 0
       SpecialOutFile = GetFileDef('OptionStudy') 
-      SpecialOutFile = OutputsDir // Trim(SpecialOutFile)
-      InfeasOutFile = OutputsDir // 'INFEAS.OUT'
+      Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout/' // Trim(SpecialOutFile) // '-', rank
+      Write(InfeasOutFile, '(A,I4.4)') OutputsDir // 'mpiout/INFEAS.OUT-', rank
       Open(Unit=70, File=InfeasOutFile, Status='Unknown')
       Open(Unit=90, File=SpecialOutFile, Status='Unknown')
       ! Skip a header line
@@ -610,7 +608,7 @@ implicit none
 
     end subroutine 
 
-    subroutine BuildSolverMatrix(OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
+    subroutine BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
       HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
       ! This is an assumption that weekday flows are 110% of weekly average flows
@@ -629,8 +627,9 @@ implicit none
       ! Max RHS is max number of potential equations
       Integer, Parameter :: MaxRhsLines = PlantCount * MaxProbRows * 2
       ! Used for testing -- all rows above are doubled to allow for this functionality
-      Logical, Parameter :: AddSlack = .FALSE.
+      Logical, Parameter :: AddSlack = .TRUE.
 
+      Integer, Intent(In) :: rank
       Real(dp), Intent(In) :: OutageProb(14, 4)
       Character(6), Intent(In) :: Plnt(PlantCount), Dwnstr(PlantCount)
       Integer, Intent(In) :: InStudy(PlantCount)
@@ -1516,8 +1515,9 @@ implicit none
       Write(99, '(A6)') 'ENDATA'
       Close(99)
     end subroutine
-    subroutine RunSolver(Iper, Iwyr, sys, SolverFiles)
+    subroutine RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
 
+      Integer, Intent(In) :: rank
       Integer, Intent(Out) :: Iper, Iwyr
       Integer, Intent(In) :: sys
       Character(80), Intent(In) :: SolverFiles(80 * 14 * 4)
@@ -1528,9 +1528,10 @@ implicit none
       Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
-    subroutine OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
+    subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
       & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
 
+      Integer, Intent(In) :: rank
       Integer, Intent(In) :: sys
       Character(6), Intent(In) :: Plnt(PlantCount)
       Integer, Intent(In) :: Iper, Iwyr
@@ -1548,7 +1549,7 @@ implicit none
       Real(dp) :: VarValue(PlantCount * 7 * 2), ObjValue
       Character(100) :: Line
       Logical :: VarHeaderDone = .FALSE.
-      Integer :: OnTurbPos, OffTurbPos, OnSpillPos, OffSpillPos
+      Integer :: OnTurbPos, OffTurbPos, OnSpillPos, OffSpillPos, PlntVarsFound
       Character(8) :: OnTurbName, OffTurbName, OnSpillName, OffSpillName
       Real(dp) :: GasCapOn, GasCapOff
       Real(dp) :: SpillFac, TargetSpill, PerctSpill, SpillAdd, TotFlow, Diff
@@ -1564,11 +1565,11 @@ implicit none
       OutProfile = Mod(sys - 1, 4) + 1
 
       OutFile = GetFileDef('OutputFile')
-      OutFile = OutputsDir // Trim(OutFile)
+      Write(OutFile, '(A, I4.4)') OutputsDir // 'mpiout/' // Trim(OutFile) // '-', rank
       Open(Unit=50, File=OutFile, Iostat=Eof)
 
       ReservOutFile = GetFileDef('ReserveFile')
-      ReservOutFile = OutputsDir // Trim(ReservOutFile)
+      Write(ReservOutFile, '(A, I4.4)') OutputsDir // 'mpiout/' // Trim(ReservOutFile) // '-', rank
       Open(Unit=60, File=ReservOutFile, Status='Unknown')
 
       ! Pull number of peak hours for output
@@ -1588,9 +1589,6 @@ implicit none
       ! Read the solver output
       Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
       Open(Unit=100, File=SolveOutFile, Iostat=Eof)
-
-!      InfeasOutFile = OutputsDir // 'INFEAS.OUT'
-!      Open(Unit=70, File=InfeasOutFile, Status='Unknown')
 
       VarNum = 1
       VarHeaderDone = .FALSE.
@@ -1614,6 +1612,7 @@ implicit none
       Do i = 1, PlantCount
         If (InStudy(i) .NE. 0) Then
           OnTurbPos = 0; OffTurbPos = 0; OnSpillPos = 0; OffSpillPos = 0;
+          PlntVarsFound = 0
           Do j = 1, VarNum
             Write(OnTurbName, '(A,I2.2,A)') 'W', i, 'TN'
 !            Write(OffTurbName, '(A,I2.2,A)') 'W', i, 'TF'
@@ -1621,14 +1620,21 @@ implicit none
 !            Write(OffSpillName, '(A,I2.2,A)') 'W', i, 'SF'
             If (VarName(j) .EQ. OnTurbName) Then
               OnTurbPos = j
-!            Else If (VarName(j) .EQ. OffTurbName) Then
-              OffTurbPos = j + 1
+              PlntVarsFound = PlntVarsFound + 1
 !            Else If (VarName(j) .EQ. OnSpillName) Then
-              OnSpillPos = j + 2
+              OnSpillPos = j + 1
+              PlntVarsFound = PlntVarsFound + 1
+!            Else If (VarName(j) .EQ. OffTurbName) Then
+              OffTurbPos = j + 2
+              PlntVarsFound = PlntVarsFound + 1
 !            Else If (VarName(j) .EQ. OffSpillName) Then
               OffSpillPos = j + 3
-              Exit
+              PlntVarsFound = PlntVarsFound + 1
             End If
+            ! This improves the speed 
+            If (PlntVarsFound .EQ. 4) Then
+              Exit
+            End If 
           End Do
           GasCapOn = 0; GasCapOff = 0; SpillFac = 0;
           FlowForm = '(A20, 2X, A6, 2I5, 4F8.0)'
@@ -1804,5 +1810,29 @@ implicit none
         Write(90, '(1X,I2,1X,I4,1X,A4,3F7.0)') Iper, Iwyr, 'East', OtherGenEast, OtherOnEast, OtherOffEast
         Write(90, '(1X,I2,1X,I4,1X,A4,3F7.0)') Iper, Iwyr, 'Idah', OtherGenId, OtherOnId, OtherOffId
       End If
+    end subroutine
+    subroutine CombineOutputFiles(rank)
+      Integer, Intent(In) :: rank
+      Character(80) :: OutFile, ReservOutFile, SpecialOutFile
+
+      OutFile = GetFileDef('OutputFile')
+      ReservOutFile = GetFileDef('ReserveFile')
+      SpecialOutFile = GetFileDef('OptionStudy') 
+      If (rank .EQ. 0) Then
+        call System("rm '" // OutputsDir // "allsys.out'")
+        call System("rm '" // OutputsDir // trim(OutFile) // "'")
+        call System("rm '" // OutputsDir // trim(ReservOutFile) // "'")
+        call System("rm '" // OutputsDir // trim(SpecialOutFile) // "'")
+        call System("rm '" // OutputsDir // "INFEAS.OUT'")
+        call System("cat '" // OutputsDir // "lpout/'* >> " // OutputsDir // "allsys.out")
+        call System("cat '" // OutputsDir // "mpiout/" // trim(OutFile) //"'* >> '" // OutputsDir // trim(OutFile) // "'")
+        call System("cat '" // OutputsDir // "mpiout/" // trim(ReservOutFile) //"'* >> '" &
+         & // OutputsDir // trim(ReservOutFile) // "'")
+        call System("cat '" // OutputsDir // "mpiout/" // trim(SpecialOutFile) //"'* >> '" &
+         & // OutputsDir // trim(SpecialOutFile) //  "'")
+        call System("cat '" // OutputsDir // "mpiout/INFEAS.OUT'* >> '" &
+         & // OutputsDir // "INFEAS.OUT'")
+      End If
+
     end subroutine
 end program
