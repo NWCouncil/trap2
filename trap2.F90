@@ -90,7 +90,7 @@ implicit none
 
   EndProg = MPI_WTime()
   If (rank .EQ. 0) Then
-    Print '(A, F4.1, A)', "That took ", EndProg - StartProg, " seconds."
+    Print '(A, F5.1, A)', "That took ", EndProg - StartProg, " seconds."
   End If
 
   contains
@@ -1525,7 +1525,7 @@ implicit none
       Character(80) :: SolveOutFile
 
       OutProfile = Mod(sys - 1, 4) + 1
-      Write(SolveOutFile, '(A8,A4,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
+      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
     subroutine OutputResults(sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
@@ -1538,8 +1538,9 @@ implicit none
       Real(dp), Intent(In) :: WindDec(PlantCount, 14)
       Real(dp), Intent(In) :: HIndIdaho, HIndEast, HIndWest
       Real(dp), Intent(In) :: NotModE, NotModW, NotModI, ModE, ModW, ModI
-        Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
+      Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
       
+      Integer :: OutProfile
       Character(80) :: NumOnDef
       Integer :: NumOn, Eof, VarNum, i, j, NumOff, NumShdr
       Character(80) :: OutFile, SolveOutFile, ReservOutFile, FlowForm
@@ -1559,6 +1560,8 @@ implicit none
       Real(dp) :: OtherOnEast, OtherOffEast, OtherOnWest, OtherOffWest
       Real(dp) :: OtherOnId, OtherOffId
       Real(dp) :: EnergyOut, PlntFac, PeakFacOther
+
+      OutProfile = Mod(sys - 1, 4) + 1
 
       OutFile = GetFileDef('OutputFile')
       OutFile = OutputsDir // Trim(OutFile)
@@ -1583,7 +1586,7 @@ implicit none
       End If
 
       ! Read the solver output
-      Write(SolveOutFile, '(A8, "lpout/sys",I4.4,".out")') OutputsDir, sys
+      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
       Open(Unit=100, File=SolveOutFile, Iostat=Eof)
 
 !      InfeasOutFile = OutputsDir // 'INFEAS.OUT'
@@ -1744,7 +1747,7 @@ implicit none
           End If
 
           If (Mod(sys, 4) .EQ. 1) Then
-            Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(j), OnGenTemp/1000, OffGenTemp/1000
+            Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(i), OnGenTemp/1000, OffGenTemp/1000
           End If
   
           If (InStudy(i) .EQ. 1) Then
@@ -1796,6 +1799,10 @@ implicit none
 
       Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
 
-      Print *, OtherOnWest
+      If (Mod(sys, 4) .EQ. 1) Then
+        Write(90, '(1X,I2,1X,I4,1X,A4,3F7.0)') Iper, Iwyr, 'West', OtherGenWest, OtherOnWest, OtherOffWest
+        Write(90, '(1X,I2,1X,I4,1X,A4,3F7.0)') Iper, Iwyr, 'East', OtherGenEast, OtherOnEast, OtherOffEast
+        Write(90, '(1X,I2,1X,I4,1X,A4,3F7.0)') Iper, Iwyr, 'Idah', OtherGenId, OtherOnId, OtherOffId
+      End If
     end subroutine
 end program
