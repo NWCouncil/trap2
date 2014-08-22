@@ -16,7 +16,7 @@ implicit none
   Integer :: rank, comsize, ierr, sys
   Integer :: LocSysCount, StartSys, EndSys
   Integer :: RegDataNum, OldRegDataNum
-  Real(dp) :: StartProg, EndProg
+  Real(dp) :: StartProg, EndProg, TempTime
 
   Real(dp) :: OutageProb(14, 4)
   Character(6) :: Plnt(PlantCount), Dwnstr(PlantCount)
@@ -69,7 +69,7 @@ implicit none
         & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
       OldRegDataNum = RegDataNum
     End If
-
+    TempTime = MPI_WTime()
     call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
         HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
@@ -1614,27 +1614,16 @@ implicit none
           OnTurbPos = 0; OffTurbPos = 0; OnSpillPos = 0; OffSpillPos = 0;
           PlntVarsFound = 0
           Do j = 1, VarNum
+            ! This code assumes the position of variables.  If changed above it will need to be adjusted here as well.
+            !  Searching for each variable was time consuming -- Ben
             Write(OnTurbName, '(A,I2.2,A)') 'W', i, 'TN'
-!            Write(OffTurbName, '(A,I2.2,A)') 'W', i, 'TF'
-!            Write(OnSpillName, '(A,I2.2,A)') 'W', i, 'SN'
-!            Write(OffSpillName, '(A,I2.2,A)') 'W', i, 'SF'
             If (VarName(j) .EQ. OnTurbName) Then
               OnTurbPos = j
-              PlntVarsFound = PlntVarsFound + 1
-!            Else If (VarName(j) .EQ. OnSpillName) Then
               OnSpillPos = j + 1
-              PlntVarsFound = PlntVarsFound + 1
-!            Else If (VarName(j) .EQ. OffTurbName) Then
               OffTurbPos = j + 2
-              PlntVarsFound = PlntVarsFound + 1
-!            Else If (VarName(j) .EQ. OffSpillName) Then
               OffSpillPos = j + 3
-              PlntVarsFound = PlntVarsFound + 1
-            End If
-            ! This improves the speed 
-            If (PlntVarsFound .EQ. 4) Then
               Exit
-            End If 
+            End If
           End Do
           GasCapOn = 0; GasCapOff = 0; SpillFac = 0;
           FlowForm = '(A20, 2X, A6, 2I5, 4F8.0)'
