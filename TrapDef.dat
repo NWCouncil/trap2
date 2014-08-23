@@ -1,7 +1,10 @@
+"InputsDir","inputs/"
+"OutputsDir","outputs/"
 "BPAReguFile","BPAREGU 2017 for TRAP.OUT"
 "FOR/MaintFile","FOR.DAT"
 "PlantParamsFile","SYSTEM 6K.DEF"
 "ReserveFile","trap 2017 Reserves.OUT"
 "OutputFile","run 6K-2hr.OUT"
-"NumberofPkHours", 2
+"NumberofPkHours",2
 "OptionStudy","Special 6K-2hr"
+

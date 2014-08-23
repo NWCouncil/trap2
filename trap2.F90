@@ -8,11 +8,11 @@ use mpi
 implicit none
 
   Integer, Parameter :: dp = kind(1.d0)
-  Character(7), Parameter :: InputsDir = 'inputs/'
-  Character(8), Parameter :: OutputsDir = 'outputs/'
   Logical, Parameter :: UseDecWind = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
 
+  Character(120) :: RawInputsDir, RawOutputsDir
+  Character(len=:), allocatable :: InputsDir, OutputsDir
   Integer :: rank, comsize, ierr, sys
   Integer :: LocSysCount, StartSys, EndSys
   Integer :: RegDataNum, OldRegDataNum
@@ -37,6 +37,11 @@ implicit none
   
   StartProg = MPI_WTime()
 
+  RawInputsDir = GetFileDef('InputsDir')
+  InputsDir = Trim(RawInputsDir)
+  RawOutputsDir = GetFileDef('OutputsDir')
+  OutputsDir = Trim(RawOutputsDir)
+  
   call GetOutageDerate(OutageProb)
 
   call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec)
@@ -69,7 +74,7 @@ implicit none
         & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
       OldRegDataNum = RegDataNum
     End If
-    TempTime = MPI_WTime()
+
     call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
         HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
@@ -100,7 +105,7 @@ implicit none
       Character(80) :: GetFileDef, FileDefName
       Open(Unit=2, File='TrapDef.dat', Status='Old')
       Eof = 0
-      Do i=1,7
+      Do i = 1,9 
         Read(2, '(a)', Iostat=Eof) DataString
         Read(DataString, *) DummyVar
         If (DummyVar .EQ. FileIdString) Then
@@ -128,7 +133,7 @@ implicit none
       Real(dp) :: AvgFor, ForMean, ForVar, ForSD, ForLow, ForHigh
       ! First Read statement skips the title line
       ForFile = GetFileDef('FOR/MaintFile')
-      ForFile = InputsDir // Trim(ForFile)
+      ForFile = Trim(InputsDir) // Trim(ForFile)
       Eof = 0
       Open(Unit=20, File=ForFile, Status='OLD')
       Read(20, '(1x)', Iostat=Eof)
@@ -211,7 +216,7 @@ implicit none
       Logical :: PlantOrderCorrect
 
       SystemFile = GetFileDef('PlantParamsFile')
-      SystemFile = InputsDir // Trim(SystemFile)
+      SystemFile = Trim(InputsDir) // Trim(SystemFile)
       Eof = 0
       Open(unit=30, File=SystemFile, Iostat=Eof)    
       ! Read the system data (SYSTEM.DEF) starting with
@@ -351,7 +356,7 @@ implicit none
       Logical :: DoneContents
 
       ReguFile = GetFileDef('BPAReguFile')
-      ReguFile = InputsDir // Trim(ReguFile)
+      ReguFile = Trim(InputsDir) // Trim(ReguFile)
       Open(Unit=40, File=ReguFile, Iostat=Eof)
 
       If (Eof .LT. 0) Then
@@ -428,7 +433,7 @@ implicit none
       TotMw = 0
       SpecialOutFile = GetFileDef('OptionStudy') 
       Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout/' // Trim(SpecialOutFile) // '-', rank
-      Write(InfeasOutFile, '(A,I4.4)') OutputsDir // 'mpiout/INFEAS.OUT-', rank
+      Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout/INFEAS.OUT-', rank
       Open(Unit=70, File=InfeasOutFile, Status='Unknown')
       Open(Unit=90, File=SpecialOutFile, Status='Unknown')
       ! Skip a header line
@@ -770,7 +775,7 @@ implicit none
       !  MPS file that can be read into a command line solver.  This allows
       !  some flexibility if we choose to use different solvers in the
       !  future -- Ben
-      Write(SolverFiles(sys), '(A8,A4,I4.4,I2.2,I1.1,A4)') OutputsDir, 'mps/', Iwyr, Iper, OutProfile, '.mps'
+      Write(SolverFiles(sys), '(A8,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps/', Iwyr, Iper, OutProfile, '.mps'
       Open(Unit=99, File=SolverFiles(sys), Status='Unknown')
 
       Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper 
@@ -1054,7 +1059,7 @@ implicit none
 
       ! Make sure the number of peaking hours is supported by the program
       NumOn = 0
-      NumOnDef = trim(GetFileDef('NumberofPkHours'))
+      NumOnDef = Trim(GetFileDef('NumberofPkHours'))
       Read(NumOnDef, '(I2)') NumOn
       If (NumOn .LE. 0) Then
         Print *, 'Error reading the number of peak hours for the study'
@@ -1525,7 +1530,7 @@ implicit none
       Character(80) :: SolveOutFile
 
       OutProfile = Mod(sys - 1, 4) + 1
-      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
+      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
@@ -1565,16 +1570,16 @@ implicit none
       OutProfile = Mod(sys - 1, 4) + 1
 
       OutFile = GetFileDef('OutputFile')
-      Write(OutFile, '(A, I4.4)') OutputsDir // 'mpiout/' // Trim(OutFile) // '-', rank
+      Write(OutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(OutFile) // '-', rank
       Open(Unit=50, File=OutFile, Iostat=Eof)
 
       ReservOutFile = GetFileDef('ReserveFile')
-      Write(ReservOutFile, '(A, I4.4)') OutputsDir // 'mpiout/' // Trim(ReservOutFile) // '-', rank
+      Write(ReservOutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(ReservOutFile) // '-', rank
       Open(Unit=60, File=ReservOutFile, Status='Unknown')
 
       ! Pull number of peak hours for output
       NumOn = 0
-      NumOnDef = trim(GetFileDef('NumberofPkHours'))
+      NumOnDef = Trim(GetFileDef('NumberofPkHours'))
       Read(NumOnDef, '(I2)') NumOn
       NumShdr = 8
       NumOff = 24 - NumOn - NumShdr 
@@ -1587,7 +1592,7 @@ implicit none
       End If
 
       ! Read the solver output
-      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') OutputsDir, 'lpout/', Iwyr, Iper, OutProfile, '.out'
+      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
       Open(Unit=100, File=SolveOutFile, Iostat=Eof)
 
       VarNum = 1
@@ -1808,19 +1813,20 @@ implicit none
       ReservOutFile = GetFileDef('ReserveFile')
       SpecialOutFile = GetFileDef('OptionStudy') 
       If (rank .EQ. 0) Then
-        call System("rm '" // OutputsDir // "allsys.out'")
-        call System("rm '" // OutputsDir // trim(OutFile) // "'")
-        call System("rm '" // OutputsDir // trim(ReservOutFile) // "'")
-        call System("rm '" // OutputsDir // trim(SpecialOutFile) // "'")
-        call System("rm '" // OutputsDir // "INFEAS.OUT'")
-        call System("cat '" // OutputsDir // "lpout/'* >> " // OutputsDir // "allsys.out")
-        call System("cat '" // OutputsDir // "mpiout/" // trim(OutFile) //"'* >> '" // OutputsDir // trim(OutFile) // "'")
-        call System("cat '" // OutputsDir // "mpiout/" // trim(ReservOutFile) //"'* >> '" &
-         & // OutputsDir // trim(ReservOutFile) // "'")
-        call System("cat '" // OutputsDir // "mpiout/" // trim(SpecialOutFile) //"'* >> '" &
-         & // OutputsDir // trim(SpecialOutFile) //  "'")
-        call System("cat '" // OutputsDir // "mpiout/INFEAS.OUT'* >> '" &
-         & // OutputsDir // "INFEAS.OUT'")
+        call System("rm '" // Trim(OutputsDir) // "allsys.out'")
+        call System("rm '" // Trim(OutputsDir) // Trim(OutFile) // "'")
+        call System("rm '" // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
+        call System("rm '" // Trim(OutputsDir) // Trim(SpecialOutFile) // "'")
+        call System("rm '" // Trim(OutputsDir) // "INFEAS.OUT'")
+        call System("cat '" // Trim(OutputsDir) // "lpout/'* >> " // Trim(OutputsDir) // "allsys.out")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(OutFile) //"'* >> '" &
+          & // Trim(OutputsDir) // Trim(OutFile) // "'")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(ReservOutFile) //"'* >> '" &
+          & // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(SpecialOutFile) //"'* >> '" &
+          & // Trim(OutputsDir) // Trim(SpecialOutFile) //  "'")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/INFEAS.OUT'* >> '" &
+          & // Trim(OutputsDir) // "INFEAS.OUT'")
       End If
 
     end subroutine
