@@ -632,7 +632,7 @@ implicit none
       ! Max RHS is max number of potential equations
       Integer, Parameter :: MaxRhsLines = PlantCount * MaxProbRows * 2
       ! Used for testing -- all rows above are doubled to allow for this functionality
-      Logical, Parameter :: AddSlack = .TRUE.
+      Logical, Parameter :: AddSlack = .FALSE.
 
       Integer, Intent(In) :: rank
       Real(dp), Intent(In) :: OutageProb(14, 4)
@@ -799,22 +799,6 @@ implicit none
             Write(RowName(i, 1), '(A1,I2.2,A2)') 'P', i, 'WB'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 1), RowName(i, 1)
             NRow = NRow + 1
-            If (AddSlack) Then
-              Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
-              ColNum = ColNum + 1
-              MpsRowName(MpsLineNum) = RowName(i, 1)
-              Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
-              MpsRowValue(MpsLineNum) = 1 
-              MpsLineNum = MpsLineNum + 1
-              MpsRowName(MpsLineNum) = 'OBJ'
-              Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
-              MpsRowValue(MpsLineNum) = -1000
-              MpsLineNum = MpsLineNum + 1
-              Write(BndColName(BndLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
-              BndLineNum = BndLineNum + 1
-            End If
           Else If (Pond(i, Iper) .GE. 0) Then
             ! If there is a pond constratint then things are much more
             !  complicated.  The first rows is for on-peak water constraints
@@ -833,14 +817,58 @@ implicit none
             RowType(i, 4) = 'L'
             Write(RowName(i, 4), '(A1,I2.2,A3)') 'P', i, 'WD1'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 4), RowName(i, 4)
-            RowType(i, 5) = 'L'
+            RowType(i, 5) = 'G'
             Write(RowName(i, 5), '(A1,I2.2,A3)') 'P', i, 'WD2'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 5), RowName(i, 5)
             RowType(i, 6) = 'L'
             Write(RowName(i, 6), '(A1,I2.2,A3)') 'P', i, 'WD3'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 6), RowName(i, 6)
-            NRow = NRow + 6
-            If (AddSlack) Then
+            RowType(i, 7) = 'G'
+            Write(RowName(i, 7), '(A1,I2.2,A3)') 'P', i, 'WD4'
+            Write(99, '(1X, A1, 2X, A8)') RowType(i, 7), RowName(i, 7)
+            NRow = NRow + 7
+          Else 
+            Print *, 'Problem with pond for plant ', Plnt(i)
+            Stop
+          End If
+
+          If (QMin(i) .GE. 0) Then
+            ! Make sure on-peak flows exceed Q Min
+            RowType(i, 8) = 'G'
+            Write(RowName(i, 8), '(A1,I2.2,A2)') 'P', i, 'QN'
+            Write(99, '(1X, A1, 2X, A8)') RowType(i, 8), RowName(i, 8)
+            ! Make sure off-peak flows exceed Q Min 
+            RowType(i, 9) = 'G'
+            Write(RowName(i, 9), '(A1,I2.2,A2)') 'P', i, 'QF'
+            Write(99, '(1X, A1, 2X, A8)') RowType(i, 9), RowName(i, 9)
+            NRow = NRow + 2
+          End If 
+          If (Ramp(i) .GE. 0) Then
+            ! Make sure ramp constraints are met
+            RowType(i, 10) = 'L'
+            Write(RowName(i, 10), '(A1,I2.2,A2)') 'P', i, 'RP'
+            Write(99, '(1X, A1, 2X, A8)') RowType(i, 10), RowName(i, 10)
+            NRow = NRow + 1
+          End If
+
+          ! Adding slack variables below used for troubleshooting
+          If (AddSlack) Then
+            If (Pond(i, Iper) .LT. 0) Then
+              Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
+              ColNum = ColNum + 1
+              MpsRowName(MpsLineNum) = RowName(i, 1)
+              Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
+              MpsRowValue(MpsLineNum) = 1 
+              MpsLineNum = MpsLineNum + 1
+              MpsRowName(MpsLineNum) = 'OBJ'
+              Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
+              MpsRowValue(MpsLineNum) = -1000
+              MpsLineNum = MpsLineNum + 1
+              Write(BndColName(BndLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
+              BndColType(BndLineNum) = 'LO' 
+              BndColValue(BndLineNum) = 0 
+              BndLineNum = BndLineNum + 1
+            Else
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WBN'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 1)
@@ -945,7 +973,7 @@ implicit none
               BndColType(BndLineNum) = 'LO' 
               BndColValue(BndLineNum) = 0 
               BndLineNum = BndLineNum + 1
- 
+
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD2'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 5)
@@ -960,7 +988,7 @@ implicit none
               BndColType(BndLineNum) = 'LO' 
               BndColValue(BndLineNum) = 0 
               BndLineNum = BndLineNum + 1
- 
+
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD3'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 6)
@@ -975,26 +1003,26 @@ implicit none
               BndColType(BndLineNum) = 'LO' 
               BndColValue(BndLineNum) = 0 
               BndLineNum = BndLineNum + 1
-            End If
-          Else 
-            Print *, 'Problem with pond for plant ', Plnt(i)
-            Stop
-          End If
 
-          If (QMin(i) .GE. 0) Then
-            ! Make sure on-peak flows exceed Q Min
-            RowType(i, 7) = 'G'
-            Write(RowName(i, 7), '(A1,I2.2,A2)') 'P', i, 'QN'
-            Write(99, '(1X, A1, 2X, A8)') RowType(i, 7), RowName(i, 7)
-            ! Make sure off-peak flows exceed Q Min 
-            RowType(i, 8) = 'G'
-            Write(RowName(i, 8), '(A1,I2.2,A2)') 'P', i, 'QF'
-            Write(99, '(1X, A1, 2X, A8)') RowType(i, 8), RowName(i, 8)
-            NRow = NRow + 2
-            If (AddSlack) Then
-              Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'QN'
+              Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 7)
+              Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
+              MpsRowValue(MpsLineNum) = 1 
+              MpsLineNum = MpsLineNum + 1
+              MpsRowName(MpsLineNum) = 'OBJ'
+              Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
+              MpsRowValue(MpsLineNum) = -1000
+              MpsLineNum = MpsLineNum + 1
+              Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
+              BndColType(BndLineNum) = 'LO' 
+              BndColValue(BndLineNum) = 0 
+              BndLineNum = BndLineNum + 1
+            End If
+            If (QMin(i) .GE. 0) Then
+              Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'QN'
+              ColNum = ColNum + 1
+              MpsRowName(MpsLineNum) = RowName(i, 8)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'QN'
               MpsRowValue(MpsLineNum) = 1 
               MpsLineNum = MpsLineNum + 1
@@ -1009,7 +1037,7 @@ implicit none
 
               Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'QF'
               ColNum = ColNum + 1
-              MpsRowName(MpsLineNum) = RowName(i, 8)
+              MpsRowName(MpsLineNum) = RowName(i, 9)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'QF'
               MpsRowValue(MpsLineNum) = 1 
               MpsLineNum = MpsLineNum + 1
@@ -1022,17 +1050,10 @@ implicit none
               BndColValue(BndLineNum) = 0 
               BndLineNum = BndLineNum + 1
             End If
-          End If 
-          If (Ramp(i) .GE. 0) Then
-            ! Make sure ramp constraints are met
-            RowType(i, 9) = 'L'
-            Write(RowName(i, 9), '(A1,I2.2,A2)') 'P', i, 'RP'
-            Write(99, '(1X, A1, 2X, A8)') RowType(i, 9), RowName(i, 9)
-            NRow = NRow + 1
-            If (AddSlack) Then
+            If (Ramp(i) .GE. 0) Then
               Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'RP'
               ColNum = ColNum + 1
-              MpsRowName(MpsLineNum) = RowName(i, 9)
+              MpsRowName(MpsLineNum) = RowName(i, 10)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'RP'
               MpsRowValue(MpsLineNum) = 1 
               MpsLineNum = MpsLineNum + 1
@@ -1047,6 +1068,7 @@ implicit none
             End If
           End If
         End If
+        
         NumRows(i) = NRow
       End Do
       !Print *, NRow, ' rows in study'
@@ -1091,7 +1113,7 @@ implicit none
         ColNum = ColNum + 4
         If (InStudy(i) .NE. 0) Then
           TotalCap = TotalCap + Hk(i) * FullGte(i)
-          If (Pond(i, Iper) .LE. 0) Then
+          If (Pond(i, Iper) .LT. -0) Then
             ! Since this logic is for large storage projects this
             !  gives the water balance by just weighting the flows by
             !  the number of hours
@@ -1189,22 +1211,23 @@ implicit none
             ! Now for weekday draft and weekend refill equation
             MpsRowName(MpsLineNum) = RowName(i, 3)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-            MpsRowValue(MpsLineNum) = 5
+            MpsRowValue(MpsLineNum) = -1
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 3)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
-            MpsRowValue(MpsLineNum) = -5
+            MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 3)
             RhsRowValue(RhsLineNum) = 48. * (QMin(i) - QLpFlow(i))
             RhsLineNum = RhsLineNum + 1
 
-            ! And weekday drafting logic
+            ! And weekday drafting logic -- The assumption is that you can use up to 
+            !  half the pond to shift water between heavy and light
             MpsRowName(MpsLineNum) = RowName(i, 4)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-            MpsRowValue(MpsLineNum) = -6
+            MpsRowValue(MpsLineNum) = -1
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 4)
@@ -1212,149 +1235,51 @@ implicit none
             MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
 
-            MpsRowName(MpsLineNum) = RowName(i, 4)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
-            MpsRowValue(MpsLineNum) = 5 
-            MpsLineNum = MpsLineNum + 1
-
             RhsRowName(RhsLineNum) = RowName(i, 4)
-            RhsRowValue(RhsLineNum) = Pond(i, Iper)
+            RhsRowValue(RhsLineNum) = .5 * Pond(i, Iper)
             RhsLineNum = RhsLineNum + 1
 
-!            MpsRowName(MpsLineNum) = RowName(i, 5)
-!            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-!            MpsRowValue(MpsLineNum) = 4
-!            MpsLineNum = MpsLineNum + 1
-!
-!            MpsRowName(MpsLineNum) = RowName(i, 5)
-!            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
-!            MpsRowValue(MpsLineNum) = 1
-!            MpsLineNum = MpsLineNum + 1
-!
-!            MpsRowName(MpsLineNum) = RowName(i, 5)
-!            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
-!            MpsRowValue(MpsLineNum) = -5
-!            MpsLineNum = MpsLineNum + 1
-!
-!            RhsRowName(RhsLineNum) = RowName(i, 5)
-!            RhsRowValue(RhsLineNum) = Pond(i, Iper)
-!            RhsLineNum = RhsLineNum + 1
-!
-            !The below constraint is unneeded with S0, S1 and S2 are restricted
-            ! to be between 0 and Pond -- Ben
-!            MpsRowName(MpsLineNum) = RowName(i, 6)
-!            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-!            MpsRowValue(MpsLineNum) = -1
-!            MpsLineNum = MpsLineNum + 1
-!
-!            MpsRowName(MpsLineNum) = RowName(i, 6)
-!            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
-!            MpsRowValue(MpsLineNum) = 1
-!            MpsLineNum = MpsLineNum + 1
-!
-!            MpsRowName(MpsLineNum) = RowName(i, 6)
-!            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
-!            MpsRowValue(MpsLineNum) = 0
-!            MpsLineNum = MpsLineNum + 1
-!
-!            RhsRowName(RhsLineNum) = RowName(i, 6)
-!            RhsRowValue(RhsLineNum) = Pond(i, Iper)
-!            RhsLineNum = RhsLineNum + 1
+            MpsRowName(MpsLineNum) = RowName(i, 5)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
+            MpsRowValue(MpsLineNum) = -1 
+            MpsLineNum = MpsLineNum + 1
 
+            MpsRowName(MpsLineNum) = RowName(i, 5)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
+            MpsRowValue(MpsLineNum) = 1
+            MpsLineNum = MpsLineNum + 1
 
-            ! Now add the terms for downstream plants
-            If (Delay(i) .LT. 9.) Then
-              If (Dwnstr(i) .NE. '      ') Then
-                FoundDwnstr = .FALSE.
-                Do j = i + 1, PlantCount
-                  If (Plnt(j) .EQ. Dwnstr(i)) Then
-                    FoundDwnstr = .TRUE.
-                    If (Pond(j, Iper) .GE. 0. .AND. InStudy(j) .NE. 0) Then
-                      ! The delay determines the coefficient of the downstream water balance
-                      !  equations for upstream water. Basically, this is weighting how much of
-                      !  the water released in the desired peak, shows up in the downstream plant
-                      !  during the desired peak hours.
-                      If (Delay(j) .LE. NumShdr) Then
-                        Tterm = Delay(j)**2*.5/NumShdr
-                      Else If (Delay(j) .LE. (1. * NumOff)) Then
-                        Tterm = Delay(j) - NumShdr*.5
-                      Else If (Delay(j) .LE. NumOff) Then
-                        Tterm = Delay(j) - NumShdr*.5 - (Delay(j) - (24. - (NumOn + NumShdr * .5)))**2*.5/NumShdr
-                      Else
-                        Tterm = 24. - (NumOn + NumShdr * .5)
-                      End If
+            RhsRowName(RhsLineNum) = RowName(i, 5)
+            RhsRowValue(RhsLineNum) = -.5 * Pond(i, Iper)
+            RhsLineNum = RhsLineNum + 1
 
-                      ! Put the coefficients in the on-peak equation for downstream plants
-                      MpsRowName(MpsLineNum) = RowName(j, 1)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                      MpsRowValue(MpsLineNum) = Tterm - (NumOn + NumShdr * .5)
-                      MpsLineNum = MpsLineNum + 1
-                      
-                      MpsRowName(MpsLineNum) = RowName(j, 1)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-                      MpsRowValue(MpsLineNum) = Tterm - (NumOn + NumShdr * .5)
-                      MpsLineNum = MpsLineNum + 1
+            MpsRowName(MpsLineNum) = RowName(i, 6)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
+            MpsRowValue(MpsLineNum) = -1
+            MpsLineNum = MpsLineNum + 1
 
-                      MpsRowName(MpsLineNum) = RowName(j, 1)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                      MpsRowValue(MpsLineNum) = -Tterm - NumShdr * .5
-                      MpsLineNum = MpsLineNum + 1
+            MpsRowName(MpsLineNum) = RowName(i, 6)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
+            MpsRowValue(MpsLineNum) = 1
+            MpsLineNum = MpsLineNum + 1
 
-                      MpsRowName(MpsLineNum) = RowName(j, 1)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-                      MpsRowValue(MpsLineNum) = -Tterm - NumShdr * .5
-                      MpsLineNum = MpsLineNum + 1
+            RhsRowName(RhsLineNum) = RowName(i, 6)
+            RhsRowValue(RhsLineNum) = .5 * Pond(i, Iper)
+            RhsLineNum = RhsLineNum + 1
 
-                      ! Put the coefficients in the off-peak equation for downstream plants
-                      MpsRowName(MpsLineNum) = RowName(j, 2)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                      MpsRowValue(MpsLineNum) = -Tterm 
-                      MpsLineNum = MpsLineNum + 1
-                      
-                      MpsRowName(MpsLineNum) = RowName(j, 2)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-                      MpsRowValue(MpsLineNum) = -Tterm
-                      MpsLineNum = MpsLineNum + 1
+            MpsRowName(MpsLineNum) = RowName(i, 7)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
+            MpsRowValue(MpsLineNum) = -1 
+            MpsLineNum = MpsLineNum + 1
 
-                      MpsRowName(MpsLineNum) = RowName(j, 2)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                      MpsRowValue(MpsLineNum) = Tterm - NumOff
-                      MpsLineNum = MpsLineNum + 1
+            MpsRowName(MpsLineNum) = RowName(i, 7)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
+            MpsRowValue(MpsLineNum) = 1
+            MpsLineNum = MpsLineNum + 1
 
-                      MpsRowName(MpsLineNum) = RowName(j, 2)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-                      MpsRowValue(MpsLineNum) = Tterm - NumOff 
-                      MpsLineNum = MpsLineNum + 1
-
-                      ! Put the coefficients in for weekday draft and weekend refill constraint
-                      MpsRowName(MpsLineNum) = RowName(j, 3)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                      MpsRowValue(MpsLineNum) = 168. - 5*(NumOn + NumShdr * .5)
-                      MpsLineNum = MpsLineNum + 1
-                      
-                      MpsRowName(MpsLineNum) = RowName(j, 3)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-                      MpsRowValue(MpsLineNum) = 168. - 5*(NumOn + NumShdr * .5)
-                      MpsLineNum = MpsLineNum + 1
-
-                      MpsRowName(MpsLineNum) = RowName(j, 3)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                      MpsRowValue(MpsLineNum) = 168. - 5*(24 - (NumOn + NumShdr * .5))
-                      MpsLineNum = MpsLineNum + 1
-
-                      MpsRowName(MpsLineNum) = RowName(j, 3)
-                      Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-                      MpsRowValue(MpsLineNum) = 168 - 5*(24 - (NumOn + NumShdr * .5))
-                      MpsLineNum = MpsLineNum + 1
-                    End If
-                  End If
-                End Do
-                If (.NOT. FoundDwnstr) Then
-                  Print *, 'Could not find - ', Dwnstr(i), ' as a downstream plant'
-                  Stop
-                End If
-              End If
-            End If
+            RhsRowName(RhsLineNum) = RowName(i, 7)
+            RhsRowValue(RhsLineNum) = -.5 * Pond(i, Iper)
+            RhsLineNum = RhsLineNum + 1
 
             ! And put bounds on the storage
             Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
@@ -1373,60 +1298,154 @@ implicit none
             BndLineNum = BndLineNum + 1
           End If 
 
+          ! Now add the terms for downstream plants
+          If (Delay(i) .LT. 9.) Then
+            If (Dwnstr(i) .NE. '      ') Then
+              FoundDwnstr = .FALSE.
+              Do j = i + 1, PlantCount
+                If (Plnt(j) .EQ. Dwnstr(i)) Then
+                  FoundDwnstr = .TRUE.
+                  If (Pond(j, Iper) .GE. 0. .AND. InStudy(j) .NE. 0) Then
+                    ! The delay determines the coefficient of the downstream water balance
+                    !  equations for upstream water. Basically, this is weighting how much of
+                    !  the water released in the desired peak, shows up in the downstream plant
+                    !  during the desired peak hours.
+                    If (Delay(j) .LE. NumShdr) Then
+                      Tterm = Delay(j)**2*.5/NumShdr
+                    Else If (Delay(j) .LE. (1. * NumOff)) Then
+                      Tterm = Delay(j) - NumShdr*.5
+                    Else If (Delay(j) .LE. NumOff) Then
+                      Tterm = Delay(j) - NumShdr*.5 - (Delay(j) - (24. - (NumOn + NumShdr * .5)))**2*.5/NumShdr
+                    Else
+                      Tterm = 24. - (NumOn + NumShdr * .5)
+                    End If
+
+                    ! Put the coefficients in the on-peak equation for downstream plants
+                    MpsRowName(MpsLineNum) = RowName(j, 1)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                    MpsRowValue(MpsLineNum) = Tterm - (NumOn + NumShdr * .5)
+                    MpsLineNum = MpsLineNum + 1
+                    
+                    MpsRowName(MpsLineNum) = RowName(j, 1)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
+                    MpsRowValue(MpsLineNum) = Tterm - (NumOn + NumShdr * .5)
+                    MpsLineNum = MpsLineNum + 1
+
+                    MpsRowName(MpsLineNum) = RowName(j, 1)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                    MpsRowValue(MpsLineNum) = -Tterm - NumShdr * .5
+                    MpsLineNum = MpsLineNum + 1
+
+                    MpsRowName(MpsLineNum) = RowName(j, 1)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
+                    MpsRowValue(MpsLineNum) = -Tterm - NumShdr * .5
+                    MpsLineNum = MpsLineNum + 1
+
+                    ! Put the coefficients in the off-peak equation for downstream plants
+                    MpsRowName(MpsLineNum) = RowName(j, 2)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                    MpsRowValue(MpsLineNum) = -Tterm 
+                    MpsLineNum = MpsLineNum + 1
+                    
+                    MpsRowName(MpsLineNum) = RowName(j, 2)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
+                    MpsRowValue(MpsLineNum) = -Tterm
+                    MpsLineNum = MpsLineNum + 1
+
+                    MpsRowName(MpsLineNum) = RowName(j, 2)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                    MpsRowValue(MpsLineNum) = Tterm - NumOff
+                    MpsLineNum = MpsLineNum + 1
+
+                    MpsRowName(MpsLineNum) = RowName(j, 2)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
+                    MpsRowValue(MpsLineNum) = Tterm - NumOff 
+                    MpsLineNum = MpsLineNum + 1
+
+                    ! Put the coefficients in for weekday draft and weekend refill constraint
+                    MpsRowName(MpsLineNum) = RowName(j, 3)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                    MpsRowValue(MpsLineNum) = 168. - 5*(NumOn + NumShdr * .5)
+                    MpsLineNum = MpsLineNum + 1
+                    
+                    MpsRowName(MpsLineNum) = RowName(j, 3)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
+                    MpsRowValue(MpsLineNum) = 168. - 5*(NumOn + NumShdr * .5)
+                    MpsLineNum = MpsLineNum + 1
+
+                    MpsRowName(MpsLineNum) = RowName(j, 3)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                    MpsRowValue(MpsLineNum) = 168. - 5*(24 - (NumOn + NumShdr * .5))
+                    MpsLineNum = MpsLineNum + 1
+
+                    MpsRowName(MpsLineNum) = RowName(j, 3)
+                    Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
+                    MpsRowValue(MpsLineNum) = 168 - 5*(24 - (NumOn + NumShdr * .5))
+                    MpsLineNum = MpsLineNum + 1
+                  End If
+                End If
+              End Do
+              If (.NOT. FoundDwnstr) Then
+                Print *, 'Could not find - ', Dwnstr(i), ' as a downstream plant'
+                Stop
+              End If
+            End If
+          End If
+
           ! Put in QMin equations
           If (QMin(i) .GT. 0) Then
-            MpsRowName(MpsLineNum) = RowName(i, 7)
+            MpsRowName(MpsLineNum) = RowName(i, 8)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
             MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
             
-            MpsRowName(MpsLineNum) = RowName(i, 7)
+            MpsRowName(MpsLineNum) = RowName(i, 8)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-            MpsRowValue(MpsLineNum) = 1
-            MpsLineNum = MpsLineNum + 1
-
-            RhsRowName(RhsLineNum) = RowName(i, 7)
-            RhsRowValue(RhsLineNum) = QMin(i)
-            RhsLineNum = RhsLineNum + 1
-
-            MpsRowName(MpsLineNum) = RowName(i, 8)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-            MpsRowValue(MpsLineNum) = 1
-            MpsLineNum = MpsLineNum + 1
-
-            MpsRowName(MpsLineNum) = RowName(i, 8)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
             MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 8)
             RhsRowValue(RhsLineNum) = QMin(i)
             RhsLineNum = RhsLineNum + 1
-          End If
-
-          ! Put in ramp limit equations
-          If (Ramp(i) .GT. 0) Then
-            MpsRowName(MpsLineNum) = RowName(i, 9)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-            MpsRowValue(MpsLineNum) = 1
-            MpsLineNum = MpsLineNum + 1
-            
-            MpsRowName(MpsLineNum) = RowName(i, 9)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-            MpsRowValue(MpsLineNum) = 1
-            MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 9)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-            MpsRowValue(MpsLineNum) = -1
+            MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 9)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-            MpsRowValue(MpsLineNum) = -1
+            MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 9)
+            RhsRowValue(RhsLineNum) = QMin(i)
+            RhsLineNum = RhsLineNum + 1
+          End If
+
+          ! Put in ramp limit equations
+          If (Ramp(i) .GT. 0) Then
+            MpsRowName(MpsLineNum) = RowName(i, 10)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+            MpsRowValue(MpsLineNum) = 1
+            MpsLineNum = MpsLineNum + 1
+            
+            MpsRowName(MpsLineNum) = RowName(i, 10)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
+            MpsRowValue(MpsLineNum) = 1
+            MpsLineNum = MpsLineNum + 1
+
+            MpsRowName(MpsLineNum) = RowName(i, 10)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+            MpsRowValue(MpsLineNum) = -1
+            MpsLineNum = MpsLineNum + 1
+
+            MpsRowName(MpsLineNum) = RowName(i, 10)
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
+            MpsRowValue(MpsLineNum) = -1
+            MpsLineNum = MpsLineNum + 1
+
+            RhsRowName(RhsLineNum) = RowName(i, 10)
             RhsRowValue(RhsLineNum) = NumShdr * Ramp(i)
             RhsLineNum = RhsLineNum + 1
           End If
