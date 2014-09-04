@@ -4,7 +4,7 @@
 "FOR/MaintFile","FOR.DAT"
 "PlantParamsFile","SYSTEM 6K.DEF"
 "ReserveFile","trap 2017 Reserves.OUT"
-"OutputFile","run 6K-2hr.OUT"
-"NumberofPkHours",2
-"OptionStudy","Special 6K-2hr"
+"OutputFile","run 6K-4hr-20pct.OUT"
+"NumberofPkHours",4
+"OptionStudy","Special 6K-4hr"
 

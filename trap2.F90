@@ -790,6 +790,7 @@ implicit none
       ColNum = 1
       Do i = 1, PlantCount
         If (InStudy(i) .NE. 0) Then
+          Write(99, '(A3, I2.2, A3, A6)') '* P', i, ' - ', Plnt(i)
           NPlantInStudy = NPlantInStudy + 1
           If (Pond(i, Iper) .LT. 0) Then
             ! Negative values for pond indicate that the project has enough
@@ -1236,7 +1237,7 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 4)
-            RhsRowValue(RhsLineNum) = .5 * Pond(i, Iper)
+            RhsRowValue(RhsLineNum) = 0.5 * Pond(i, Iper)
             RhsLineNum = RhsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 5)
@@ -1250,11 +1251,11 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 5)
-            RhsRowValue(RhsLineNum) = -.5 * Pond(i, Iper)
+            RhsRowValue(RhsLineNum) = -0.5 * Pond(i, Iper)
             RhsLineNum = RhsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 6)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
             MpsRowValue(MpsLineNum) = -1
             MpsLineNum = MpsLineNum + 1
 
@@ -1264,11 +1265,11 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 6)
-            RhsRowValue(RhsLineNum) = .5 * Pond(i, Iper)
+            RhsRowValue(RhsLineNum) = 0.2 * Pond(i, Iper)
             RhsLineNum = RhsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 7)
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
             MpsRowValue(MpsLineNum) = -1 
             MpsLineNum = MpsLineNum + 1
 
@@ -1278,7 +1279,7 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 7)
-            RhsRowValue(RhsLineNum) = -.5 * Pond(i, Iper)
+            RhsRowValue(RhsLineNum) = -0.2 * Pond(i, Iper)
             RhsLineNum = RhsLineNum + 1
 
             ! And put bounds on the storage
