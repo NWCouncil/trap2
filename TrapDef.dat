@@ -1,5 +1,5 @@
-"InputsDir","inputs/"
-"OutputsDir","outputs/"
+"InputsDir","/mnt/Q/ClusterFiles/Trap2/inputs/"
+"OutputsDir","/mnt/Q/ClusterFiles/Trap2/outputs/"
 "BPAReguFile","BPAREGU 2017 for TRAP.OUT"
 "FOR/MaintFile","FOR.DAT"
 "PlantParamsFile","SYSTEM 6K.DEF"
@@ -7,4 +7,5 @@
 "OutputFile","run 6K-4hr-20pct.OUT"
 "NumberofPkHours",4
 "OptionStudy","Special 6K-4hr"
+"LpFile","LP.OUT"
 

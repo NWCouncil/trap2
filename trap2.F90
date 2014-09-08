@@ -102,10 +102,10 @@ implicit none
       Character(*) :: FileIdString
       Character(50) :: DummyVar
       Character(132) :: DataString
-      Character(80) :: GetFileDef, FileDefName
+      Character(120) :: GetFileDef, FileDefName
       Open(Unit=2, File='TrapDef.dat', Status='Old')
       Eof = 0
-      Do i = 1,9 
+      Do i = 1,10
         Read(2, '(a)', Iostat=Eof) DataString
         Read(DataString, *) DummyVar
         If (DummyVar .EQ. FileIdString) Then
@@ -775,7 +775,7 @@ implicit none
       !  MPS file that can be read into a command line solver.  This allows
       !  some flexibility if we choose to use different solvers in the
       !  future -- Ben
-      Write(SolverFiles(sys), '(A8,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps/', Iwyr, Iper, OutProfile, '.mps'
+      Write(SolverFiles(sys), '(A,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps/', Iwyr, Iper, OutProfile, '.mps'
       Open(Unit=99, File=SolverFiles(sys), Status='Unknown')
 
       Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper 
@@ -1550,7 +1550,7 @@ implicit none
       Character(80) :: SolveOutFile
 
       OutProfile = Mod(sys - 1, 4) + 1
-      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
+      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
@@ -1569,9 +1569,11 @@ implicit none
       Integer :: OutProfile
       Character(80) :: NumOnDef
       Integer :: NumOn, Eof, VarNum, i, j, NumOff, NumShdr
-      Character(80) :: OutFile, SolveOutFile, ReservOutFile, FlowForm
+      Character(80) :: OutFile, SolveOutFile, ReservOutFile, FlowForm, LpFile
+      Character(80) :: LpVarsFile
       Character(8) :: VarName(PlantCount * 7 * 2)
       Real(dp) :: VarValue(PlantCount * 7 * 2), ObjValue
+      Integer :: RecLen
       Character(100) :: Line
       Logical :: VarHeaderDone = .FALSE.
       Integer :: OnTurbPos, OffTurbPos, OnSpillPos, OffSpillPos, PlntVarsFound
@@ -1604,15 +1606,8 @@ implicit none
       NumShdr = 8
       NumOff = 24 - NumOn - NumShdr 
 
-      ! Setup some basic headers
-      If (sys .EQ. 1) Then
-        Write(50, *) 'hours in peak = '
-        Write(50, '(1X, I3)') NumOn 
-        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   IWY'
-      End If
-
       ! Read the solver output
-      Write(SolveOutFile, '(A8,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
+      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
       Open(Unit=100, File=SolveOutFile, Iostat=Eof)
 
       VarNum = 1
@@ -1631,6 +1626,27 @@ implicit none
           VarHeaderDone = .TRUE.
         End If
       End Do
+
+      ! Setup some basic headers
+      If (sys .EQ. 1) Then
+        Write(50, *) 'hours in peak = '
+        Write(50, '(1X, I3)') NumOn 
+        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   IWY'
+
+        Write(LpVarsFile, '(A, I4.4)') Trim(OutputsDir) // 'LPVARS'
+        Open(Unit=102, File=LpVarsFile)
+        Write(102, *) (VarName(i), i=1,VarNum-1)
+        Write(102, *) (Plnt(i), i=1,PlantCount)
+
+      End If
+
+      Inquire(iolength=RecLen) VarValue(1:(VarNum-1))
+      LpFile = GetFileDef('LpFile')
+      !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank
+      Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
+      Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
+      Write(101, Rec=sys) VarValue(1:(VarNum-1))
+
 
       EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
       IdOnPeakCap = 0; IdOffPeakCap = 0;
