@@ -1,11 +1,10 @@
-"InputsDir","/mnt/Q/ClusterFiles/Trap2/inputs/"
-"OutputsDir","/mnt/Q/ClusterFiles/Trap2/outputs/"
-"BPAReguFile","BPAREGU 2017 for TRAP.OUT"
-"FOR/MaintFile","FOR.DAT"
-"PlantParamsFile","SYSTEM 6K.DEF"
-"ReserveFile","trap 2017 Reserves.OUT"
-"OutputFile","run 6K-4hr-20pct.OUT"
-"NumberofPkHours",4
-"OptionStudy","Special 6K-4hr"
+"InputsDir","E:\NewTRAP\"
+"OutputsDir","E:\NewTRAP\"
+"BPAReguFile","BPAREGU 2019 for TRAP.OUT"
+"FOR/MaintFile","FOR_rev_zero.DAT"
+"PlantParamsFile","SYSTEM 4K_PHB_AVL.DEF"
+"ReserveFile","trap_2019_Res_2.OUT"
+"OutputFile","run 4K-2hr-20pct.OUT"
+"NumberofPkHours",2
+"OptionStudy","Special 4K-2hr.OUT"
 "LpFile","LP.OUT"
-

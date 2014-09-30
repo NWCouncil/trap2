@@ -4,6 +4,13 @@ program Trap2
 ! Code largely based on the original trap by Mike McCoy.
 ! Mistakes are likely mine and brilliant code is likely his.
 ! -- Ben Kujala
+
+! PHB 20140925 Minor changes incorporated to align the period 
+! indexing, include hyavails, accomodate compiler-specific 
+! differences, system differences, etc.  It reads in the 
+! hyavails, but haven't completely incorporated yet -- 
+
+
 use mpi
 implicit none
 
@@ -19,11 +26,12 @@ implicit none
   Real(dp) :: StartProg, EndProg, TempTime
 
   Real(dp) :: OutageProb(14, 4)
-  Character(6) :: Plnt(PlantCount), Dwnstr(PlantCount)
+  Character(6) :: Plnt(PlantCount + 1), Dwnstr(PlantCount)  ! PHB Plnt array match size
   Integer :: InStudy(PlantCount)
   Real(dp) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
-  Real(dp) :: HkVsFg(PlantCount, 8)
+  Real(dp) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
+  Real(dp) :: HYAVL(PlantCount,14)  ! PHB added
   Real(dp) :: Pond(PlantCount, 14) 
   Integer :: Iper, Iwyr, StartRegDataNum
   Real(dp) :: PeriodDraft
@@ -35,6 +43,7 @@ implicit none
   Character(80) :: SolverFiles(80 * 14 * 4)
   Real(dp) :: Hk(PlantCount), TotalCap
   
+  call MPI_Init(ierr)  ! PHB call Init here instead of earlier
   StartProg = MPI_WTime()
 
   RawInputsDir = GetFileDef('InputsDir')
@@ -44,12 +53,13 @@ implicit none
   
   call GetOutageDerate(OutageProb)
 
-  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec)
+  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, HYAVL) ! PHB added HYAVL
 
   ! The following code takes care of the embarassingly parallel part of this problem using some
   !  basic OpenMPI functionality.  This will allow for this code to be split to up to the number
   !  of processors equal to the number of systems solved, 80 * 14 * 4 = 4480 processors as of 7/23/2014 -- Ben
-  call MPI_Init(ierr)
+  
+  ! call MPI_Init(ierr)  ! PHB comment out here, call Init before this
   call MPI_Comm_size(MPI_COMM_WORLD, comsize, ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
 
@@ -75,22 +85,25 @@ implicit none
       OldRegDataNum = RegDataNum
     End If
 
+    ! PHB added HYAVL
     call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-        HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
+        HkVsFg, Pond, HYAVL, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
     call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
 
+    ! PHB added HYAVL
     call OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
-      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
+      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap, HYAVL)
     
   End Do
 
-  call MPI_Finalize(ierr)
+!  call MPI_Finalize(ierr)  ! PHB comment out here, call Finalize later
 
   call CombineOutputFiles(rank)
-
+  
   EndProg = MPI_WTime()
+  call MPI_Finalize(ierr)  ! PHB call Finalize here instead of earlier
   If (rank .EQ. 0) Then
     Print '(A, F5.1, A)', "That took ", EndProg - StartProg, " seconds."
   End If
@@ -131,6 +144,7 @@ implicit none
       Integer :: IPer
       Real(dp) :: A1, A2
       Real(dp) :: AvgFor, ForMean, ForVar, ForSD, ForLow, ForHigh
+      
       ! First Read statement skips the title line
       ForFile = GetFileDef('FOR/MaintFile')
       ForFile = Trim(InputsDir) // Trim(ForFile)
@@ -162,11 +176,21 @@ implicit none
         !  and high maintenance.  This ends up with a Low-Low, Low-High, High-Low
         !  and High-High column for Maintenance and FOR respectively for each of 
         !  the 14 periods.
+        
+      ! PHB -- Note that the FOR/Maint used to be keyed to Sept = period 1, and the 
+      ! Sept data was being used with Oct when the reg started with Oct = period 1.  
+      ! When reading the Iper off the input table, the data for Iper = 1 should 
+      ! correspond to period 1 in the reg.  For a quick and dirty solution, simply
+      ! rearrange the data in the input file!  Also created another FOR.dat file that 
+      ! essentially zeroed out the 4 states, since we do not use the stochastic
+      ! hydrocapacity, and hyavails incorporate FOR and maint.   
+         
         OutageProb(IPer, 1) = A1
         OutageProb(IPer, 2) = A1
         OutageProb(IPer, 3) = A2
         OutageProb(IPer, 4) = A2
       End Do
+      
       ! Now using some statistical theory on binary distribution derive
       !  the expected MW to be out due to forced outages
       Iper = 0
@@ -200,19 +224,21 @@ implicit none
       End Do
     end subroutine
 
-    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec)
+    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, HYAVL)
+    ! PHB added HYAVL to args
       Integer :: i, j, Eof
       Character(80) :: SystemFile
       Integer :: NPlant
       Character(80) :: FormatString
-      Character(6), Intent(Out) :: Plnt(PlantCount), Dwnstr(PlantCount)
+      Character(6), Intent(Out) :: Plnt(0:PlantCount), Dwnstr(PlantCount)  ! PHB override default lower bound of Plnt()
       Integer, Intent(Out) :: InStudy(PlantCount)
       Real(dp), Intent(Out) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
       Real(dp) :: OldPond 
       Character(6) :: TempName
-      Real(dp), Intent(Out) :: HkVsFg(PlantCount, 8)
+      Real(dp), Intent(Out) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
       Real(dp), Intent(Out) :: Pond(PlantCount, 14) 
       Real(dp), Intent(Out) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
+      Real(dp), Intent(Out) :: HYAVL(PlantCount, 14)  ! PHB added
       Logical :: PlantOrderCorrect
 
       SystemFile = GetFileDef('PlantParamsFile')
@@ -226,7 +252,9 @@ implicit none
 
       ! Read past the title rows, this skips two lines
       Read(30, '(/)')
-      NPlant = 0
+      NPlant = 0   ! PHB -- some compilers object to array index
+!                  ! at LT 1 unless override default lower bound 
+
       Do While (Eof .GE. 0 .AND. Plnt(NPlant) .NE. '      ')
         NPlant = NPlant + 1
         FormatString = '(1X,A6,4X,A6,5X,I1,4X,F3.0,3X,F4.0,3X,F6.0,3X,F4.0)'
@@ -235,7 +263,6 @@ implicit none
         Ramp(NPlant) = Ramp(NPlant) * 1000
         !Print *, Plnt(NPlant), Dwnstr(NPlant), InStudy(NPlant), Ramp(NPlant), OldPond, Cap(NPlant)
       End Do
-      NPlant = NPlant - 1
 
        ! Next read the table of Hks versus Full Gate Flows. This is a (up
        !  to four point) table in the form hk1,fg1,hk2,fg2,...,fg4.  Anything
@@ -259,7 +286,7 @@ implicit none
       !  modeling for capacity.
 
       ! Read past a few lines
-      Read(30, '(///)')
+      Read(30, '(//)')
       Do i = 1, NPlant
         Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (Pond(i, j), j=1, 14)
         !Print *, TempName, (Pond(i, j), j=1, 14)
@@ -276,7 +303,7 @@ implicit none
       ! Next read the table of QMIN vs Period...
 
       ! Read past a few lines
-      Read(30, '(///)')
+      Read(30, '(//)')
       Do i = 1, NPlant
         Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (QMinIn(i, j), j=1, 14)
         !Print *, TempName, (QMinIn(i, j), j=1, 14)
@@ -293,7 +320,7 @@ implicit none
       ! Next read the table of Wind Decremental vs Period...
 
       ! Read past a few lines
-      Read(30, '(///)')
+      Read(30, '(//)')
       Do i = 1, NPlant
         Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (WindDec(i, j), j=1, 14)
         !Print *, TempName, (WindDec(i, j), j=1, 14)
@@ -306,6 +333,28 @@ implicit none
           WindDec(i, j) = WindDec(i, j) * 1000
         End Do
       End Do
+      
+! PHB Incorporate period and plant varying hyavail
+      
+      ! PHB Init the HYAVL array = 100.
+      HYAVL(:,:) = 100.
+      
+      Read(30, '(//)')
+      Do i = 1, NPlant
+        Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (HYAVL(i, j), j=1, 14)
+        !Print *, TempName, (HYAVL(i, j), j=1, 14)
+        If (Plnt(i) .NE. TempName) Then
+          Print *, TempName
+          Print *, 'Did not find  ', Plnt(i), '  in proper sequence (HYAVL).'
+          Stop
+        End If
+        Do j = 1, 14
+          HYAVL(i, j) = HYAVL(i, j) / 100.
+        End Do
+      End Do
+      
+! PHB finished reading hyavails
+      
       PlantOrderCorrect = .TRUE. 
       Do i = 1, PlantCount - 1
         Do j = i + 1, PlantCount
@@ -330,7 +379,7 @@ implicit none
       Character(6), Parameter :: NotModEastNames(7) = (/'POST F', 'UP FLS', 'MON ST', &
         'NINE M', 'LONG L', 'L FALL', 'REREG ' /)
       Integer, Intent(In) :: rank
-      Character(6), Intent(In) :: Plnt(PlantCount)
+      Character(6), Intent(In) :: Plnt(0:PlantCount)  ! PHB Plnt array match size
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: QMinIn(PlantCount)
       Integer, Intent(InOut) :: StartRegDataNum
@@ -432,8 +481,8 @@ implicit none
       NumFound = 0
       TotMw = 0
       SpecialOutFile = GetFileDef('OptionStudy') 
-      Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout/' // Trim(SpecialOutFile) // '-', rank
-      Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout/INFEAS.OUT-', rank
+      Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout\' // Trim(SpecialOutFile) // '-', rank  ! PHB my system uses \ backslash
+      Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout\INFEAS.OUT-', rank     ! PHB my system uses \ backslash
       Open(Unit=70, File=InfeasOutFile, Status='Unknown')
       Open(Unit=90, File=SpecialOutFile, Status='Unknown')
       ! Skip a header line
@@ -503,11 +552,25 @@ implicit none
             !  This code handles plants that have absolute minimum requirements: LR.GRN,LR MON,BONN
             !  The others are handled below! 
 
+              ! PHB  With the current reg, period 1 is indexed to October (originally was September)
+              !
+              ! 1 = Oct       8 = Ap2
+              ! 2 = Nov       9 = May
+              ! 3 = Dec      10 = Jun
+              ! 4 = Jan      11 = Jul
+              ! 5 = Feb      12 = Ag1
+              ! 6 = Mar      13 = Ag2
+              ! 7 = Ap1      14 = Sep
+              !
+              ! PHB  Adjust all hard-coded references to Iper to correct index
+            
             ! Code for BiOp spill at Lower Granite
-            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
               ! Spill at 20000 April and May, then 18000 until second half of August
               GasCap = 20000
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
                 GasCap = 18000
               End If
               FormatString = '(1X,I2,1X,I4,A25,3F7.0)' 
@@ -518,17 +581,21 @@ implicit none
               SMinOff(i) = AMin1(GasCap - 100., TQOut)
               SMinOn(i) = SMinOff(i)
               ! If total flow is under 65000 in May then no spill requirement
-              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
                 SMinOff(i) = 0.
                 SMinOn(i) = 0.
               End If
             End If
 
             ! Code for BiOp spill at Lo Mo
-            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
               ! Spill at 30000 in April and May, then 17000 until the second half of August
+              
               GasCap = 30000
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
                 GasCap = 17000
               End If
               If (TQOut .LT. GasCap - 100.) Then
@@ -537,27 +604,35 @@ implicit none
               SMinOff(i) = AMin1(GasCap - 100., TQOut)
               SMinOn(i) = SMinOff(i)
               ! If total flow is under 65000 in May then no spill requirement
-              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
                 SMinOff(i) = 0.
                 SMinOn(i) = 0.
               End If
             End If
           
             ! Code for BiOp spill at Bonneville
-            If (TempName .EQ. 'BONN' .AND. Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (TempName .EQ. 'BONN' .AND. Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (TempName .EQ. 'BONN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then  ! PHB change to 8 and 13 (from 9 and 14)
               GasCap = 113000
               ! Unlike other plants Bonnevilles desired spill is under the gas cap
               DesiredSpillOn = 100000
               DesiredSpillOff = 100000
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
                 DesiredSpillOff = GasCap
               End If
-              If (Iper .EQ. 11) Then
+!              If (Iper .EQ. 11) Then
+              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11)
                 DesiredSpillOn = 92500
-              Else If (Iper .EQ. 12) Then
-                DesiredSpillOn = 82500
-              Else If (Iper .GE. 13) Then
-                DesiredSpillOn = 72500
+!              Else If (Iper .EQ. 12) Then
+              Else If (Iper .EQ. 11) Then  ! PHB change to 11 (from 12)
+!                DesiredSpillOn = 82500
+                DesiredSpillOn = 85000     ! PHB change to 85000 from 82500?
+!              Else If (Iper .GE. 13) Then
+              Else If (Iper .GE. 12) Then  ! PHB change to 12 (from 13)
+!                DesiredSpillOn = 72500
+                DesiredSpillOn = 75000     ! PHB change to 75000 from 72500?
               End If 
 
               If (TQOut .LT. DesiredSpillOn) Then
@@ -614,7 +689,7 @@ implicit none
     end subroutine 
 
     subroutine BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, HYAVL, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
 
       ! This is an assumption that weekday flows are 110% of weekly average flows
       Real(dp), Parameter :: PerWkday = 1.10
@@ -636,11 +711,12 @@ implicit none
 
       Integer, Intent(In) :: rank
       Real(dp), Intent(In) :: OutageProb(14, 4)
-      Character(6), Intent(In) :: Plnt(PlantCount), Dwnstr(PlantCount)
+      Character(6), Intent(In) :: Plnt(0:PlantCount), Dwnstr(PlantCount)  ! PHB Plnt array match size
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
       Real(dp), Intent(In) :: Pond(PlantCount, 14) 
-      Real(dp), Intent(In) :: HkVsFg(PlantCount, 8)
+      Real(dp), Intent(In) :: HYAVL(PlantCount,14)  ! PHB added
+      Real(dp), Intent(In) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
       Integer, Intent(In) :: Iper, Iwyr
       Real(dp), Intent(In) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
       Real(dp), Intent(In) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
@@ -710,6 +786,10 @@ implicit none
             End Do
             ! If you hit the last segment then use the Full Gate from that 
             !  segment
+            
+! PHB Note -- in the following IF construct, HkCurveSeg + 2 is 9 when HkCurveSeg is 7, 
+! and would need to resize array (in this sub and in main)
+            
             If (HkCurveSeg .EQ. 7 .OR. HkVsFg(j, HkCurveSeg + 2) .EQ. 0) Then
               FullGte(j) = HkVsFg(j, HkCurveSeg + 1) * 1000
             Else
@@ -731,7 +811,12 @@ implicit none
           End If
         End If
         ! Now adjust for outages
-        FullGte(j) = FullGte(j) * OutFac
+        FullGte(j) = FullGte(j) * OutFac  ! PHB -- note that OutFac reduced to 1 when zero out FOR.dat
+        
+        ! PHB The avails have FOR and maint rolled in, are plant and period specific.  
+        ! With the OutFac effectively 1 (after zeroing out the FOR.dat file), could 
+        ! adjust by hyavails here, and then the adjusted full gate would carry over 
+        ! to the turbine on/off constraints.  Not sure if want to adjust here or not.  
 
         ! And input Qout as the starting point for the lp flows
         QLpFlow(j) = QOut(j)
@@ -775,7 +860,7 @@ implicit none
       !  MPS file that can be read into a command line solver.  This allows
       !  some flexibility if we choose to use different solvers in the
       !  future -- Ben
-      Write(SolverFiles(sys), '(A,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps/', Iwyr, Iper, OutProfile, '.mps'
+      Write(SolverFiles(sys), '(A,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps\', Iwyr, Iper, OutProfile, '.mps'    ! PHB my system uses \ backslash
       Open(Unit=99, File=SolverFiles(sys), Status='Unknown')
 
       Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper 
@@ -1113,7 +1198,13 @@ implicit none
         Write(ColName(ColNum + 3), '(A1,I2.2,A2)') 'W', i, 'SF'
         ColNum = ColNum + 4
         If (InStudy(i) .NE. 0) Then
-          TotalCap = TotalCap + Hk(i) * FullGte(i)
+            
+          ! PHB incorporate the hyavail for the 1hr reserves numbers, 
+          ! this does not affect the peaking results here, need to incorp
+          ! elsewhere for that:
+
+          TotalCap = TotalCap + Hk(i) * FullGte(i) * HYAVL(i, Iper)
+          
           If (Pond(i, Iper) .LT. -0) Then
             ! Since this logic is for large storage projects this
             !  gives the water balance by just weighting the flows by
@@ -1237,8 +1328,8 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 4)
-            RhsRowValue(RhsLineNum) = 0.5 * Pond(i, Iper)
-            RhsLineNum = RhsLineNum + 1
+            RhsRowValue(RhsLineNum) = 0.2 * Pond(i, Iper)   ! PHB should coeff of 0.5 be a variable? 
+            RhsLineNum = RhsLineNum + 1                     ! other assumptions are 0.5, 0.2, 0, (I changed to 0.2)
 
             MpsRowName(MpsLineNum) = RowName(i, 5)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
@@ -1251,8 +1342,8 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 5)
-            RhsRowValue(RhsLineNum) = -0.5 * Pond(i, Iper)
-            RhsLineNum = RhsLineNum + 1
+            RhsRowValue(RhsLineNum) = -0.2 * Pond(i, Iper)   ! PHB should coeff be a variable? 
+            RhsLineNum = RhsLineNum + 1                      ! other assumptions are 0.5, 0.2, 0
 
             MpsRowName(MpsLineNum) = RowName(i, 6)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
@@ -1265,8 +1356,8 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 6)
-            RhsRowValue(RhsLineNum) = 0.2 * Pond(i, Iper)
-            RhsLineNum = RhsLineNum + 1
+            RhsRowValue(RhsLineNum) = 0.2 * Pond(i, Iper)   ! PHB should coeff of 0.2 be a variable?
+            RhsLineNum = RhsLineNum + 1 
 
             MpsRowName(MpsLineNum) = RowName(i, 7)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
@@ -1279,7 +1370,7 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 7)
-            RhsRowValue(RhsLineNum) = -0.2 * Pond(i, Iper)
+            RhsRowValue(RhsLineNum) = -0.2 * Pond(i, Iper)   ! PHB should coeff be a variable?
             RhsLineNum = RhsLineNum + 1
 
             ! And put bounds on the storage
@@ -1454,7 +1545,7 @@ implicit none
           ! Put bounds on the spill and turbine flows
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
           BndColType(BndLineNum) = 'UP' 
-          BndColValue(BndLineNum) = 1. * FullGte(i) 
+          BndColValue(BndLineNum) = 1. * FullGte(i)
           BndLineNum = BndLineNum + 1
 
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
@@ -1473,7 +1564,7 @@ implicit none
 
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
           BndColType(BndLineNum) = 'UP' 
-          BndColValue(BndLineNum) = 1. * FullGte(i) 
+          BndColValue(BndLineNum) = 1. * FullGte(i)
           BndLineNum = BndLineNum + 1
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
           BndColType(BndLineNum) = 'LO' 
@@ -1541,6 +1632,8 @@ implicit none
       Close(99)
     end subroutine
     subroutine RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
+    
+      USE IFPORT  ! PHB for system calls with my compiler
 
       Integer, Intent(In) :: rank
       Integer, Intent(Out) :: Iper, Iwyr
@@ -1548,23 +1641,30 @@ implicit none
       Character(80), Intent(In) :: SolverFiles(80 * 14 * 4)
       Integer :: OutProfile
       Character(80) :: SolveOutFile
+      LOGICAL(4) resul  ! PHB added for system call
 
       OutProfile = Mod(sys - 1, 4) + 1
-      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
-      call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
+      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout\', Iwyr, Iper, OutProfile, '.out'   ! PHB my system uses \ backslash
+!      call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
+
+! PHB  System calls are different with my compiler, try this instead:  
+
+      resul = SYSTEMQQ('lp_solve -max -mps '//SolverFiles(sys)//'>'//SolveOutFile)
+      
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
-      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
+      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap, HYAVL)
 
       Integer, Intent(In) :: rank
       Integer, Intent(In) :: sys
-      Character(6), Intent(In) :: Plnt(PlantCount)
+      Character(6), Intent(In) :: Plnt(0:PlantCount)  ! PHB Plnt array match size
       Integer, Intent(In) :: Iper, Iwyr
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: WindDec(PlantCount, 14)
       Real(dp), Intent(In) :: HIndIdaho, HIndEast, HIndWest
       Real(dp), Intent(In) :: NotModE, NotModW, NotModI, ModE, ModW, ModI
       Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
+      Real(dp), Intent(in) :: HYAVL(PlantCount,14)  ! PHB added
       
       Integer :: OutProfile
       Character(80) :: NumOnDef
@@ -1592,11 +1692,11 @@ implicit none
       OutProfile = Mod(sys - 1, 4) + 1
 
       OutFile = GetFileDef('OutputFile')
-      Write(OutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(OutFile) // '-', rank
+      Write(OutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout\' // Trim(OutFile) // '-', rank   ! PHB my system uses \ backslash
       Open(Unit=50, File=OutFile, Iostat=Eof)
 
       ReservOutFile = GetFileDef('ReserveFile')
-      Write(ReservOutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(ReservOutFile) // '-', rank
+      Write(ReservOutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout\' // Trim(ReservOutFile) // '-', rank   ! PHB my system uses \ backslash
       Open(Unit=60, File=ReservOutFile, Status='Unknown')
 
       ! Pull number of peak hours for output
@@ -1607,7 +1707,7 @@ implicit none
       NumOff = 24 - NumOn - NumShdr 
 
       ! Read the solver output
-      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
+      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout\', Iwyr, Iper, OutProfile, '.out'   ! PHB my system uses \ backslash
       Open(Unit=100, File=SolveOutFile, Iostat=Eof)
 
       VarNum = 1
@@ -1642,11 +1742,10 @@ implicit none
 
       Inquire(iolength=RecLen) VarValue(1:(VarNum-1))
       LpFile = GetFileDef('LpFile')
-      !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank
+      !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank   
       Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
       Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
       Write(101, Rec=sys) VarValue(1:(VarNum-1))
-
 
       EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
       IdOnPeakCap = 0; IdOffPeakCap = 0;
@@ -1671,15 +1770,20 @@ implicit none
           Write(70, FlowForm) "BEFOR BiOp FLOW CHECK", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), VarValue(OnSpillPos), &
             & VarValue(OffTurbPos), VarValue(OffSpillPos)
 
+          ! PHB similar adjustments to Iper references should be done here to 
+          ! line up with Oct = period 1
+          
           ! Code for BiOp spill at Little Goose - Spill at 30% of flow Apr through first half of Aug up to gas cap 
           !  unless if flow is less than 65000 in May then no spill requirement in that month
           If(Plnt(i) .EQ. "L GOOS") Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13 )
               GasCapOn = 30000
               GasCapOff = 30000
               SpillFac = .3
               TotFlow = VarValue(OnTurbPos) + VarValue(OffTurbPos) + VarValue(OnSpillPos) + VarValue(OffSpillPos)
-              If (Iper .NE. 10 .OR. TotFlow * .5 .GT. 65000) Then
+!              If (Iper .NE. 10 .OR. TotFlow * .5 .GT. 65000)
+              If (Iper .NE. 9 .OR. TotFlow * .5 .GT. 65000) Then  ! PHB change to 9 (from 10)
                 AdjustSpill = .TRUE.
               End If
             End If
@@ -1687,7 +1791,8 @@ implicit none
           
           ! Code for BiOp spill at Ice Harbor - Spill at 30% of flow Apr through first half of Aug up to gas cap
           If (Plnt(i) .EQ. "ICE H ") Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13)
               GasCapOff = 64000
               GasCapOn = 45000
               SpillFac = .3
@@ -1697,11 +1802,13 @@ implicit none
 
           ! Code for BiOp spill at McNary - Spill at 40% Apr through May up to gas cap, then 50% Jun through Aug up to gas cap
           If (Plnt(i) .EQ. "MCNARY") Then
-            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
               GasCapOn = 161000
               GasCapOff = 161000
               SpillFac = .4
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10 )
                 SpillFac = .5
               End If
               AdjustSpill = .TRUE.
@@ -1711,13 +1818,16 @@ implicit none
           ! Code for BiOp spill at John Day - spill at 35% Apr through May up to gas cap, 32.5% Jun up to gas cap, 30% Jul through
           !  Aug up to gas cap
           If (Plnt(i) .EQ. "J DAY ") Then
-            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
               GasCapOn = 131000
               GasCapOff = 131000
               SpillFac = .35
-              If (Iper .EQ. 11) Then
+!              If (Iper .EQ. 11) Then
+              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11 )
                 SpillFac = .325
-              Else If (Iper .GT. 11) Then
+!              Else If (Iper .GT. 11) Then
+              Else If (Iper .GT. 10) Then  ! PHB change to 10 (from 11 )
                 SpillFac = .3
               End If
               AdjustSpill = .TRUE.
@@ -1726,7 +1836,8 @@ implicit none
 
           ! Code for BiOp spill at The Dalles - spill at 40% of flow Apr through Aug up to Gas Cap
           If (Plnt(i) .EQ. "DALLES") Then
-            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
               GasCapOn = 115000
               GasCapOff = 115000
               SpillFac = .4
@@ -1774,6 +1885,7 @@ implicit none
           Else
             PlntFac = 1
           End If
+          
           OnGenTemp = VarValue(OnTurbPos) * Hk(i) * PlntFac
           OffGenTemp = VarValue(OffTurbPos) * Hk(i) * PlntFac
           ! Calculate flat output for plants that have lags greater than 8
@@ -1810,6 +1922,7 @@ implicit none
       !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
       !   2) The hydro projects modeled in the regulator as in the region but
       !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
+      
       PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
       OtherGenWest = NotModW + HIndWest
       OtherGenEast = NotModE + HIndEast
@@ -1821,8 +1934,8 @@ implicit none
       OtherOnId = OtherGenId * PeakFacOther
       OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
       EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
-
-      Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
+      
+        Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
         & OtherOnEast + EastOnPeakCap/1000., &
         & OtherOffEast + EastOffPeakCap/1000., &
         & ModW + NotModW + HIndWest, &
@@ -1831,7 +1944,7 @@ implicit none
         & ModI + NotModI + HIndIdaho, &
         & OtherOnId + IdOnPeakCap/1000., &
         & OtherOffId + IdOffPeakCap/1000., &
-        & Iwyr  
+        & Iwyr        
 
       Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
 
@@ -1842,27 +1955,59 @@ implicit none
       End If
     end subroutine
     subroutine CombineOutputFiles(rank)
+    
+      USE IFPORT   ! PHB for system calls with my compiler
+    
       Integer, Intent(In) :: rank
       Character(80) :: OutFile, ReservOutFile, SpecialOutFile
+      
+      INTEGER(4) remove  ! PHB added for system call
+      LOGICAL(4) resul   ! PHB added for system call
 
       OutFile = GetFileDef('OutputFile')
       ReservOutFile = GetFileDef('ReserveFile')
       SpecialOutFile = GetFileDef('OptionStudy') 
       If (rank .EQ. 0) Then
-        call System("rm '" // Trim(OutputsDir) // "allsys.out'")
-        call System("rm '" // Trim(OutputsDir) // Trim(OutFile) // "'")
-        call System("rm '" // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
-        call System("rm '" // Trim(OutputsDir) // Trim(SpecialOutFile) // "'")
-        call System("rm '" // Trim(OutputsDir) // "INFEAS.OUT'")
-        call System("cat '" // Trim(OutputsDir) // "lpout/'* >> " // Trim(OutputsDir) // "allsys.out")
-        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(OutFile) //"'* >> '" &
-          & // Trim(OutputsDir) // Trim(OutFile) // "'")
-        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(ReservOutFile) //"'* >> '" &
-          & // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
-        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(SpecialOutFile) //"'* >> '" &
-          & // Trim(OutputsDir) // Trim(SpecialOutFile) //  "'")
-        call System("cat '" // Trim(OutputsDir) // "mpiout/INFEAS.OUT'* >> '" &
-          & // Trim(OutputsDir) // "INFEAS.OUT'")
+          
+! PHB comment out -- system calls are different with my compiler
+
+!        call System("rm '" // Trim(OutputsDir) // "allsys.out'")
+!        call System("rm '" // Trim(OutputsDir) // Trim(OutFile) // "'")
+!        call System("rm '" // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
+!        call System("rm '" // Trim(OutputsDir) // Trim(SpecialOutFile) // "'")
+!        call System("rm '" // Trim(OutputsDir) // "INFEAS.OUT'")
+
+! PHB try this instead:  
+        
+         remove = DELFILESQQ(Trim(OutputsDir) // 'allsys.out')
+         remove = DELFILESQQ(Trim(OutputsDir) // Trim(OutFile))        
+         remove = DELFILESQQ(Trim(OutputsDir) // Trim(ReservOutFile))        
+         remove = DELFILESQQ(Trim(OutputsDir) // Trim(SpecialOutFile))        
+         remove = DELFILESQQ(Trim(OutputsDir) // 'INFEAS.OUT')   
+         
+! PHB comment out -- system calls are different with my compiler         
+         
+!        call System("cat '" // Trim(OutputsDir) // "lpout/'* >> " // Trim(OutputsDir) // "allsys.out")
+!        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(OutFile) //"'* >> '" &
+!          & // Trim(OutputsDir) // Trim(OutFile) // "'")
+!        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(ReservOutFile) //"'* >> '" &
+!          & // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
+!        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(SpecialOutFile) //"'* >> '" &
+!          & // Trim(OutputsDir) // Trim(SpecialOutFile) //  "'")
+!        call System("cat '" // Trim(OutputsDir) // "mpiout/INFEAS.OUT'* >> '" &
+!          & // Trim(OutputsDir) // "INFEAS.OUT'")
+        
+! PHB try this instead:          
+        
+        resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'lpout\*.out ' // Trim(OutputsDir) // 'allsys.out')
+        resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\INFEAS.OUT* ' // Trim(OutputsDir) // 'INFEAS.OUT')
+
+! PHB these user-specified filenames could have spaces in them, use double quotes or system might have trouble finding:
+        
+        resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(OutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(OutFile) // '"')
+        resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(ReservOutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(ReservOutFile) // '"')
+        resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(SpecialOutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(SpecialOutFile) // '"')
+        
       End If
 
     end subroutine
