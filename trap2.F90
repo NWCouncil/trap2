@@ -1633,7 +1633,9 @@ implicit none
     end subroutine
     subroutine RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
     
+#if defined (__INTEL_COMPILER)
       USE IFPORT  ! PHB for system calls with my compiler
+#endif
 
       Integer, Intent(In) :: rank
       Integer, Intent(Out) :: Iper, Iwyr
@@ -1645,11 +1647,16 @@ implicit none
 
       OutProfile = Mod(sys - 1, 4) + 1
       Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout\', Iwyr, Iper, OutProfile, '.out'   ! PHB my system uses \ backslash
-!      call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
 
 ! PHB  System calls are different with my compiler, try this instead:  
 
+#if defined (__INTEL_COMPILER)
       resul = SYSTEMQQ('lp_solve -max -mps '//SolverFiles(sys)//'>'//SolveOutFile)
+#elif defined (__GFORTRAN__)
+      call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
+#else 
+#error "No compiler indicated!"
+#endif
       
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
@@ -1956,7 +1963,9 @@ implicit none
     end subroutine
     subroutine CombineOutputFiles(rank)
     
+#if defined (__INTEL_COMPILER)
       USE IFPORT   ! PHB for system calls with my compiler
+#endif
     
       Integer, Intent(In) :: rank
       Character(80) :: OutFile, ReservOutFile, SpecialOutFile
@@ -1970,13 +1979,15 @@ implicit none
       If (rank .EQ. 0) Then
           
 ! PHB comment out -- system calls are different with my compiler
+!  -- BKK added preprocessor macro elements to deal with different compilers
+#if defined (__GFORTRAN__)
+        call System("rm '" // Trim(OutputsDir) // "allsys.out'")
+        call System("rm '" // Trim(OutputsDir) // Trim(OutFile) // "'")
+        call System("rm '" // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
+        call System("rm '" // Trim(OutputsDir) // Trim(SpecialOutFile) // "'")
+        call System("rm '" // Trim(OutputsDir) // "INFEAS.OUT'")
 
-!        call System("rm '" // Trim(OutputsDir) // "allsys.out'")
-!        call System("rm '" // Trim(OutputsDir) // Trim(OutFile) // "'")
-!        call System("rm '" // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
-!        call System("rm '" // Trim(OutputsDir) // Trim(SpecialOutFile) // "'")
-!        call System("rm '" // Trim(OutputsDir) // "INFEAS.OUT'")
-
+#elif defined (__INTEL_COMPILER)
 ! PHB try this instead:  
         
          remove = DELFILESQQ(Trim(OutputsDir) // 'allsys.out')
@@ -1984,19 +1995,25 @@ implicit none
          remove = DELFILESQQ(Trim(OutputsDir) // Trim(ReservOutFile))        
          remove = DELFILESQQ(Trim(OutputsDir) // Trim(SpecialOutFile))        
          remove = DELFILESQQ(Trim(OutputsDir) // 'INFEAS.OUT')   
+#else
+#error "No compiler indicated!"
+#endif
          
 ! PHB comment out -- system calls are different with my compiler         
+!  -- BKK added preprocessor macro elements to deal with different compilers
+#if defined (__GFORTRAN__)
          
-!        call System("cat '" // Trim(OutputsDir) // "lpout/'* >> " // Trim(OutputsDir) // "allsys.out")
-!        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(OutFile) //"'* >> '" &
-!          & // Trim(OutputsDir) // Trim(OutFile) // "'")
-!        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(ReservOutFile) //"'* >> '" &
-!          & // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
-!        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(SpecialOutFile) //"'* >> '" &
-!          & // Trim(OutputsDir) // Trim(SpecialOutFile) //  "'")
-!        call System("cat '" // Trim(OutputsDir) // "mpiout/INFEAS.OUT'* >> '" &
-!          & // Trim(OutputsDir) // "INFEAS.OUT'")
+        call System("cat '" // Trim(OutputsDir) // "lpout/'* >> " // Trim(OutputsDir) // "allsys.out")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(OutFile) //"'* >> '" &
+          & // Trim(OutputsDir) // Trim(OutFile) // "'")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(ReservOutFile) //"'* >> '" &
+          & // Trim(OutputsDir) // Trim(ReservOutFile) // "'")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(SpecialOutFile) //"'* >> '" &
+          & // Trim(OutputsDir) // Trim(SpecialOutFile) //  "'")
+        call System("cat '" // Trim(OutputsDir) // "mpiout/INFEAS.OUT'* >> '" &
+          & // Trim(OutputsDir) // "INFEAS.OUT'")
         
+#elif defined (__INTEL_COMPILER)
 ! PHB try this instead:          
         
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'lpout\*.out ' // Trim(OutputsDir) // 'allsys.out')
@@ -2007,6 +2024,9 @@ implicit none
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(OutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(OutFile) // '"')
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(ReservOutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(ReservOutFile) // '"')
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(SpecialOutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(SpecialOutFile) // '"')
+#else
+#error "No compiler indicated!"
+#endif
         
       End If
 
