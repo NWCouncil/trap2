@@ -481,8 +481,15 @@ implicit none
       NumFound = 0
       TotMw = 0
       SpecialOutFile = GetFileDef('OptionStudy') 
+#if defined (__GFORTRAN__)
+      Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout/' // Trim(SpecialOutFile) // '-', rank 
+      Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout/INFEAS.OUT-', rank 
+#elif defined (__INTEL_COMPILER)
       Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout\' // Trim(SpecialOutFile) // '-', rank  ! PHB my system uses \ backslash
       Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout\INFEAS.OUT-', rank     ! PHB my system uses \ backslash
+#else
+#error "No compiler indicated!"
+#endif
       Open(Unit=70, File=InfeasOutFile, Status='Unknown')
       Open(Unit=90, File=SpecialOutFile, Status='Unknown')
       ! Skip a header line
@@ -860,7 +867,13 @@ implicit none
       !  MPS file that can be read into a command line solver.  This allows
       !  some flexibility if we choose to use different solvers in the
       !  future -- Ben
+#if defined (__GFORTRAN__)
+      Write(SolverFiles(sys), '(A,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps/', Iwyr, Iper, OutProfile, '.mps'
+#elif defined (__INTEL_COMPILER)
       Write(SolverFiles(sys), '(A,A4,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'mps\', Iwyr, Iper, OutProfile, '.mps'    ! PHB my system uses \ backslash
+#else
+#error "No compiler indicated!"
+#endif
       Open(Unit=99, File=SolverFiles(sys), Status='Unknown')
 
       Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper 
@@ -1646,7 +1659,13 @@ implicit none
       LOGICAL(4) resul  ! PHB added for system call
 
       OutProfile = Mod(sys - 1, 4) + 1
+#if defined (__GFORTRAN__)
+      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
+#elif defined (__INTEL_COMPILER)
       Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout\', Iwyr, Iper, OutProfile, '.out'   ! PHB my system uses \ backslash
+#else
+#error "No compiler indicated!"
+#endif
 
 ! PHB  System calls are different with my compiler, try this instead:  
 
@@ -1699,11 +1718,23 @@ implicit none
       OutProfile = Mod(sys - 1, 4) + 1
 
       OutFile = GetFileDef('OutputFile')
+#if defined (__GFORTRAN__)
+      Write(OutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(OutFile) // '-', rank
+#elif defined (__INTEL_COMPILER)
       Write(OutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout\' // Trim(OutFile) // '-', rank   ! PHB my system uses \ backslash
+#else
+#error "No compiler indicated!"
+#endif
       Open(Unit=50, File=OutFile, Iostat=Eof)
 
       ReservOutFile = GetFileDef('ReserveFile')
+#if defined (__GFORTRAN__)
+      Write(ReservOutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(ReservOutFile) // '-', rank
+#elif defined (__INTEL_COMPILER)
       Write(ReservOutFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout\' // Trim(ReservOutFile) // '-', rank   ! PHB my system uses \ backslash
+#else
+#error "No compiler indicated!"
+#endif
       Open(Unit=60, File=ReservOutFile, Status='Unknown')
 
       ! Pull number of peak hours for output
@@ -1714,7 +1745,13 @@ implicit none
       NumOff = 24 - NumOn - NumShdr 
 
       ! Read the solver output
+#if defined (__GFORTRAN__)
+      Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout/', Iwyr, Iper, OutProfile, '.out'
+#elif defined (__INTEL_COMPILER)
       Write(SolveOutFile, '(A,A6,I4.4,I2.2,I1.1,A4)') Trim(OutputsDir), 'lpout\', Iwyr, Iper, OutProfile, '.out'   ! PHB my system uses \ backslash
+#else
+#error "No compiler indicated!"
+#endif
       Open(Unit=100, File=SolveOutFile, Iostat=Eof)
 
       VarNum = 1
