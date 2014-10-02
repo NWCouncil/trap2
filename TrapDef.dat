@@ -2,7 +2,7 @@
 "OutputsDir","/mnt/Q/ClusterFiles/Trap2/outputs/"
 "BPAReguFile","BPAREGU 2019 for TRAP.OUT"
 "FOR/MaintFile","FOR_rev_zero.DAT"
-"PlantParamsFile","SYSTEM 4K_PHB_AVL.DAT"
+"PlantParamsFile","SYSTEM 4K_PHB_AVL.DEF"
 "ReserveFile","trap_2019_Res_2.OUT"
 "OutputFile","run 4K-2hr-20pct.OUT"
 "NumberofPkHours",2
