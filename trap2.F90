@@ -1341,7 +1341,7 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 4)
-            RhsRowValue(RhsLineNum) = 0.2 * Pond(i, Iper)   ! PHB should coeff of 0.5 be a variable? 
+            RhsRowValue(RhsLineNum) = 0.5 * Pond(i, Iper)   ! PHB should coeff of 0.5 be a variable? 
             RhsLineNum = RhsLineNum + 1                     ! other assumptions are 0.5, 0.2, 0, (I changed to 0.2)
 
             MpsRowName(MpsLineNum) = RowName(i, 5)
@@ -1355,7 +1355,7 @@ implicit none
             MpsLineNum = MpsLineNum + 1
 
             RhsRowName(RhsLineNum) = RowName(i, 5)
-            RhsRowValue(RhsLineNum) = -0.2 * Pond(i, Iper)   ! PHB should coeff be a variable? 
+            RhsRowValue(RhsLineNum) = -0.5 * Pond(i, Iper)   ! PHB should coeff be a variable? 
             RhsLineNum = RhsLineNum + 1                      ! other assumptions are 0.5, 0.2, 0
 
             MpsRowName(MpsLineNum) = RowName(i, 6)
