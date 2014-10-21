@@ -10,6 +10,9 @@ implicit none
   Integer, Parameter :: dp = kind(1.d0)
   Logical, Parameter :: UseDecWind = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
+  Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
+    'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
+    'J DAY ', 'DALLES', 'BONN  '/)
 
   Character(120) :: RawInputsDir, RawOutputsDir
   Character(len=:), allocatable :: InputsDir, OutputsDir
@@ -82,7 +85,7 @@ implicit none
     call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
 
     call OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
-      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
+      & NotModI, NotModE, NotModW, FedMw, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
     
   End Do
 
@@ -167,6 +170,7 @@ implicit none
         OutageProb(IPer, 3) = A2
         OutageProb(IPer, 4) = A2
       End Do
+      
       ! Now using some statistical theory on binary distribution derive
       !  the expected MW to be out due to forced outages
       Iper = 0
@@ -483,8 +487,15 @@ implicit none
             FormatString = '(1X,I2,1X,I4,1X,A6," NTQ= ",F7.0," RGQ= ",F7.0," MWa=",F6.0)'
             Write(90, FormatString) Iper, Iwyr, TempName, NatQ, TQOut, TAvMw
             PlantFound(i) = .TRUE.
+
+            ! Fixed Federal System tracking to be based on plant name -- Ben
+            Do j=1, Size(FedPlantNames)
+              If (FedPlantNames(j) .EQ. TempName) Then
+                FedMw = FedMw + TAvMw
+              End If
+            End Do
+
             If (InStudy(i) .EQ. 1) Then
-              FedMw = FedMw + TAvMw
               ModE = ModE + TAvMw
             Else If (InStudy(i) .EQ. 2) Then
               ModW = ModW + TAvMw
@@ -503,11 +514,25 @@ implicit none
             !  This code handles plants that have absolute minimum requirements: LR.GRN,LR MON,BONN
             !  The others are handled below! 
 
+              ! PHB  With the current reg, period 1 is indexed to October (originally was September)
+              !
+              ! 1 = Oct       8 = Ap2
+              ! 2 = Nov       9 = May
+              ! 3 = Dec      10 = Jun
+              ! 4 = Jan      11 = Jul
+              ! 5 = Feb      12 = Ag1
+              ! 6 = Mar      13 = Ag2
+              ! 7 = Ap1      14 = Sep
+              !
+              ! PHB  Adjust all hard-coded references to Iper to correct index
+            
             ! Code for BiOp spill at Lower Granite
-            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
               ! Spill at 20000 April and May, then 18000 until second half of August
               GasCap = 20000
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
                 GasCap = 18000
               End If
               FormatString = '(1X,I2,1X,I4,A25,3F7.0)' 
@@ -518,17 +543,21 @@ implicit none
               SMinOff(i) = AMin1(GasCap - 100., TQOut)
               SMinOn(i) = SMinOff(i)
               ! If total flow is under 65000 in May then no spill requirement
-              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
                 SMinOff(i) = 0.
                 SMinOn(i) = 0.
               End If
             End If
 
             ! Code for BiOp spill at Lo Mo
-            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
               ! Spill at 30000 in April and May, then 17000 until the second half of August
+              
               GasCap = 30000
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
                 GasCap = 17000
               End If
               If (TQOut .LT. GasCap - 100.) Then
@@ -537,27 +566,35 @@ implicit none
               SMinOff(i) = AMin1(GasCap - 100., TQOut)
               SMinOn(i) = SMinOff(i)
               ! If total flow is under 65000 in May then no spill requirement
-              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
                 SMinOff(i) = 0.
                 SMinOn(i) = 0.
               End If
             End If
           
             ! Code for BiOp spill at Bonneville
-            If (TempName .EQ. 'BONN' .AND. Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (TempName .EQ. 'BONN' .AND. Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (TempName .EQ. 'BONN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then  ! PHB change to 8 and 13 (from 9 and 14)
               GasCap = 113000
               ! Unlike other plants Bonnevilles desired spill is under the gas cap
               DesiredSpillOn = 100000
               DesiredSpillOff = 100000
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
                 DesiredSpillOff = GasCap
               End If
-              If (Iper .EQ. 11) Then
+!              If (Iper .EQ. 11) Then
+              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11)
                 DesiredSpillOn = 92500
-              Else If (Iper .EQ. 12) Then
-                DesiredSpillOn = 82500
-              Else If (Iper .GE. 13) Then
-                DesiredSpillOn = 72500
+!              Else If (Iper .EQ. 12) Then
+              Else If (Iper .EQ. 11) Then  ! PHB change to 11 (from 12)
+!                DesiredSpillOn = 82500
+                DesiredSpillOn = 85000     ! PHB change to 85000 from 82500?
+!              Else If (Iper .GE. 13) Then
+              Else If (Iper .GE. 12) Then  ! PHB change to 12 (from 13)
+!                DesiredSpillOn = 72500
+                DesiredSpillOn = 75000     ! PHB change to 75000 from 72500?
               End If 
 
               If (TQOut .LT. DesiredSpillOn) Then
@@ -1554,7 +1591,7 @@ implicit none
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
-      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
+      & NotModI, NotModE, NotModW, FedMw, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
 
       Integer, Intent(In) :: rank
       Integer, Intent(In) :: sys
@@ -1563,7 +1600,7 @@ implicit none
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: WindDec(PlantCount, 14)
       Real(dp), Intent(In) :: HIndIdaho, HIndEast, HIndWest
-      Real(dp), Intent(In) :: NotModE, NotModW, NotModI, ModE, ModW, ModI
+      Real(dp), Intent(In) :: NotModE, NotModW, NotModI, FedMw, ModE, ModW, ModI
       Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
       
       Integer :: OutProfile
@@ -1583,10 +1620,10 @@ implicit none
       Logical :: AdjustSpill = .FALSE.
       Real(dp) :: PlantFac, OnGenTemp, OffGenTemp
       Real(dp) :: EastOnPeakCap, EastOffPeakCap, WestOnPeakCap, WestOffPeakCap
-      Real(dp) :: IdOnPeakCap, IdOffPeakCap
-      Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId
+      Real(dp) :: IdOnPeakCap, IdOffPeakCap, FedOnPeakCap, FedOffPeakCap
+      Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId, OtherGenFed
       Real(dp) :: OtherOnEast, OtherOffEast, OtherOnWest, OtherOffWest
-      Real(dp) :: OtherOnId, OtherOffId
+      Real(dp) :: OtherOnId, OtherOffId, OtherOnFed, OtherOffFed
       Real(dp) :: EnergyOut, PlntFac, PeakFacOther
 
       OutProfile = Mod(sys - 1, 4) + 1
@@ -1631,7 +1668,7 @@ implicit none
       If (sys .EQ. 1) Then
         Write(50, *) 'hours in peak = '
         Write(50, '(1X, I3)') NumOn 
-        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   IWY'
+        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   TM_FD  FDON  FDOFF   IWY'
 
         Write(LpVarsFile, '(A, I4.4)') Trim(OutputsDir) // 'LPVARS'
         Open(Unit=102, File=LpVarsFile)
@@ -1646,7 +1683,6 @@ implicit none
       Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
       Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
       Write(101, Rec=sys) VarValue(1:(VarNum-1))
-
 
       EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
       IdOnPeakCap = 0; IdOffPeakCap = 0;
@@ -1671,15 +1707,20 @@ implicit none
           Write(70, FlowForm) "BEFOR BiOp FLOW CHECK", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), VarValue(OnSpillPos), &
             & VarValue(OffTurbPos), VarValue(OffSpillPos)
 
+          ! PHB similar adjustments to Iper references should be done here to 
+          ! line up with Oct = period 1
+          
           ! Code for BiOp spill at Little Goose - Spill at 30% of flow Apr through first half of Aug up to gas cap 
           !  unless if flow is less than 65000 in May then no spill requirement in that month
           If(Plnt(i) .EQ. "L GOOS") Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13 )
               GasCapOn = 30000
               GasCapOff = 30000
               SpillFac = .3
               TotFlow = VarValue(OnTurbPos) + VarValue(OffTurbPos) + VarValue(OnSpillPos) + VarValue(OffSpillPos)
-              If (Iper .NE. 10 .OR. TotFlow * .5 .GT. 65000) Then
+!              If (Iper .NE. 10 .OR. TotFlow * .5 .GT. 65000)
+              If (Iper .NE. 9 .OR. TotFlow * .5 .GT. 65000) Then  ! PHB change to 9 (from 10)
                 AdjustSpill = .TRUE.
               End If
             End If
@@ -1687,7 +1728,8 @@ implicit none
           
           ! Code for BiOp spill at Ice Harbor - Spill at 30% of flow Apr through first half of Aug up to gas cap
           If (Plnt(i) .EQ. "ICE H ") Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13)
               GasCapOff = 64000
               GasCapOn = 45000
               SpillFac = .3
@@ -1697,11 +1739,13 @@ implicit none
 
           ! Code for BiOp spill at McNary - Spill at 40% Apr through May up to gas cap, then 50% Jun through Aug up to gas cap
           If (Plnt(i) .EQ. "MCNARY") Then
-            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
               GasCapOn = 161000
               GasCapOff = 161000
               SpillFac = .4
-              If (Iper .GT. 10) Then
+!              If (Iper .GT. 10) Then
+              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10 )
                 SpillFac = .5
               End If
               AdjustSpill = .TRUE.
@@ -1711,13 +1755,16 @@ implicit none
           ! Code for BiOp spill at John Day - spill at 35% Apr through May up to gas cap, 32.5% Jun up to gas cap, 30% Jul through
           !  Aug up to gas cap
           If (Plnt(i) .EQ. "J DAY ") Then
-            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
               GasCapOn = 131000
               GasCapOff = 131000
               SpillFac = .35
-              If (Iper .EQ. 11) Then
+!              If (Iper .EQ. 11) Then
+              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11 )
                 SpillFac = .325
-              Else If (Iper .GT. 11) Then
+!              Else If (Iper .GT. 11) Then
+              Else If (Iper .GT. 10) Then  ! PHB change to 10 (from 11 )
                 SpillFac = .3
               End If
               AdjustSpill = .TRUE.
@@ -1726,7 +1773,8 @@ implicit none
 
           ! Code for BiOp spill at The Dalles - spill at 40% of flow Apr through Aug up to Gas Cap
           If (Plnt(i) .EQ. "DALLES") Then
-            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
               GasCapOn = 115000
               GasCapOff = 115000
               SpillFac = .4
@@ -1774,6 +1822,7 @@ implicit none
           Else
             PlntFac = 1
           End If
+          
           OnGenTemp = VarValue(OnTurbPos) * Hk(i) * PlntFac
           OffGenTemp = VarValue(OffTurbPos) * Hk(i) * PlntFac
           ! Calculate flat output for plants that have lags greater than 8
@@ -1786,6 +1835,13 @@ implicit none
             Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(i), OnGenTemp/1000, OffGenTemp/1000
           End If
   
+          Do j=1, Size(FedPlantNames)
+            If (FedPlantNames(j) .EQ. Plnt(i)) Then
+              FedOnPeakCap = FedOnPeakCap + OnGenTemp 
+              FedOffPeakCap = FedOffPeakCap + OffGenTemp
+            End If
+          End Do
+
           If (InStudy(i) .EQ. 1) Then
             EastOnPeakCap = EastOnPeakCap + OnGenTemp
             EastOffPeakCap = EastOffPeakCap + OffGenTemp
@@ -1810,19 +1866,23 @@ implicit none
       !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
       !   2) The hydro projects modeled in the regulator as in the region but
       !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
+      
       PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
       OtherGenWest = NotModW + HIndWest
       OtherGenEast = NotModE + HIndEast
       OtherGenId = NotModI + HIndIdaho
+      OtherGenFed = HIndWest + HIndEast + HIndIdaho
       OtherOnWest = OtherGenWest * PeakFacOther
       OtherOffWest = (OtherGenWest * 24 - OtherOnWest * 14)/10
       OtherOnEast = OtherGenEast * PeakFacOther
       OtherOffEast = (OtherGenEast * 24 - OtherOnEast * 14)/10
       OtherOnId = OtherGenId * PeakFacOther
       OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
+      OtherOnFed = OtherGenFed * PeakFacOther
+      OtherOffFed = (OtherGenFed * 24 - OtherOnFed * 14)/10
       EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
 
-      Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
+      Write(50, '(1X,I3,12F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
         & OtherOnEast + EastOnPeakCap/1000., &
         & OtherOffEast + EastOffPeakCap/1000., &
         & ModW + NotModW + HIndWest, &
@@ -1831,6 +1891,9 @@ implicit none
         & ModI + NotModI + HIndIdaho, &
         & OtherOnId + IdOnPeakCap/1000., &
         & OtherOffId + IdOffPeakCap/1000., &
+        & FedMw + OtherGenFed, &
+        & FedOnPeakCap/1000. + OtherOnFed, &
+        & FedOffPeakCap/1000. + OtherOffFed, &
         & Iwyr  
 
       Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
