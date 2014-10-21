@@ -10,6 +10,9 @@ implicit none
   Integer, Parameter :: dp = kind(1.d0)
   Logical, Parameter :: UseDecWind = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
+  Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
+    'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
+    'J DAY ', 'DALLES', 'BONN  '/)
 
   Character(120) :: RawInputsDir, RawOutputsDir
   Character(len=:), allocatable :: InputsDir, OutputsDir
@@ -82,7 +85,7 @@ implicit none
     call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
 
     call OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
-      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
+      & NotModI, NotModE, NotModW, FedMw, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
     
   End Do
 
@@ -484,8 +487,15 @@ implicit none
             FormatString = '(1X,I2,1X,I4,1X,A6," NTQ= ",F7.0," RGQ= ",F7.0," MWa=",F6.0)'
             Write(90, FormatString) Iper, Iwyr, TempName, NatQ, TQOut, TAvMw
             PlantFound(i) = .TRUE.
+
+            ! Fixed Federal System tracking to be based on plant name -- Ben
+            Do j=1, Size(FedPlantNames)
+              If (FedPlantNames(j) .EQ. TempName) Then
+                FedMw = FedMw + TAvMw
+              End If
+            End Do
+
             If (InStudy(i) .EQ. 1) Then
-              FedMw = FedMw + TAvMw
               ModE = ModE + TAvMw
             Else If (InStudy(i) .EQ. 2) Then
               ModW = ModW + TAvMw
@@ -1581,7 +1591,7 @@ implicit none
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
-      & NotModI, NotModE, NotModW, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
+      & NotModI, NotModE, NotModW, FedMw, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
 
       Integer, Intent(In) :: rank
       Integer, Intent(In) :: sys
@@ -1590,7 +1600,7 @@ implicit none
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: WindDec(PlantCount, 14)
       Real(dp), Intent(In) :: HIndIdaho, HIndEast, HIndWest
-      Real(dp), Intent(In) :: NotModE, NotModW, NotModI, ModE, ModW, ModI
+      Real(dp), Intent(In) :: NotModE, NotModW, NotModI, FedMw, ModE, ModW, ModI
       Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
       
       Integer :: OutProfile
@@ -1610,10 +1620,10 @@ implicit none
       Logical :: AdjustSpill = .FALSE.
       Real(dp) :: PlantFac, OnGenTemp, OffGenTemp
       Real(dp) :: EastOnPeakCap, EastOffPeakCap, WestOnPeakCap, WestOffPeakCap
-      Real(dp) :: IdOnPeakCap, IdOffPeakCap
-      Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId
+      Real(dp) :: IdOnPeakCap, IdOffPeakCap, FedOnPeakCap, FedOffPeakCap
+      Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId, OtherGenFed
       Real(dp) :: OtherOnEast, OtherOffEast, OtherOnWest, OtherOffWest
-      Real(dp) :: OtherOnId, OtherOffId
+      Real(dp) :: OtherOnId, OtherOffId, OtherOnFed, OtherOffFed
       Real(dp) :: EnergyOut, PlntFac, PeakFacOther
 
       OutProfile = Mod(sys - 1, 4) + 1
@@ -1658,7 +1668,7 @@ implicit none
       If (sys .EQ. 1) Then
         Write(50, *) 'hours in peak = '
         Write(50, '(1X, I3)') NumOn 
-        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   IWY'
+        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   TM_FD  FDON  FDOFF   IWY'
 
         Write(LpVarsFile, '(A, I4.4)') Trim(OutputsDir) // 'LPVARS'
         Open(Unit=102, File=LpVarsFile)
@@ -1825,6 +1835,13 @@ implicit none
             Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(i), OnGenTemp/1000, OffGenTemp/1000
           End If
   
+          Do j=1, Size(FedPlantNames)
+            If (FedPlantNames(j) .EQ. Plnt(i)) Then
+              FedOnPeakCap = FedOnPeakCap + OnGenTemp 
+              FedOffPeakCap = FedOffPeakCap + OffGenTemp
+            End If
+          End Do
+
           If (InStudy(i) .EQ. 1) Then
             EastOnPeakCap = EastOnPeakCap + OnGenTemp
             EastOffPeakCap = EastOffPeakCap + OffGenTemp
@@ -1854,15 +1871,18 @@ implicit none
       OtherGenWest = NotModW + HIndWest
       OtherGenEast = NotModE + HIndEast
       OtherGenId = NotModI + HIndIdaho
+      OtherGenFed = HIndWest + HIndEast + HIndIdaho
       OtherOnWest = OtherGenWest * PeakFacOther
       OtherOffWest = (OtherGenWest * 24 - OtherOnWest * 14)/10
       OtherOnEast = OtherGenEast * PeakFacOther
       OtherOffEast = (OtherGenEast * 24 - OtherOnEast * 14)/10
       OtherOnId = OtherGenId * PeakFacOther
       OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
+      OtherOnFed = OtherGenFed * PeakFacOther
+      OtherOffFed = (OtherGenFed * 24 - OtherOnFed * 14)/10
       EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
 
-      Write(50, '(1X,I3,9F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
+      Write(50, '(1X,I3,12F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
         & OtherOnEast + EastOnPeakCap/1000., &
         & OtherOffEast + EastOffPeakCap/1000., &
         & ModW + NotModW + HIndWest, &
@@ -1871,6 +1891,9 @@ implicit none
         & ModI + NotModI + HIndIdaho, &
         & OtherOnId + IdOnPeakCap/1000., &
         & OtherOffId + IdOffPeakCap/1000., &
+        & FedMw + OtherGenFed, &
+        & FedOnPeakCap/1000. + OtherOnFed, &
+        & FedOffPeakCap/1000. + OtherOffFed, &
         & Iwyr  
 
       Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
