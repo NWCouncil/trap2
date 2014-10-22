@@ -20,6 +20,7 @@ implicit none
   Integer :: LocSysCount, StartSys, EndSys
   Integer :: RegDataNum, OldRegDataNum
   Real(dp) :: StartProg, EndProg, TempTime
+  Integer :: id, DoneRank, mpistatus(MPI_STATUS_SIZE)
 
   Real(dp) :: OutageProb(14, 4)
   Character(6) :: Plnt(PlantCount + 1), Dwnstr(PlantCount)  ! PHB Plnt array match size
@@ -92,8 +93,24 @@ implicit none
   End Do
 
 !  call MPI_Finalize(ierr)  ! PHB comment out here, call Finalize later
+  
+  ! Need to make sure all the processes have completed before moving on
+  If (rank .NE. 0) Then
+    call MPI_SEND(rank, 1, MPI_INTEGER, 0, 2001, MPI_COMM_WORLD, ierr)
+  else
+    Do id=1, comsize - 1
+      call MPI_RECV(DoneRank, 1, MPI_INTEGER, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, mpistatus, ierr)
+      Print '(I4, A, I4.4)', rank, ': Received Completed Signal from ', DoneRank
+    End Do
+  End If
+  
+  ! And make sure all files are completed before they are combined.
+  call CloseFiles()
 
-  call CombineOutputFiles(rank)
+  If (rank .EQ. 0) Then
+    Print '(I4, A, I4.4)', rank, ': Starting File Combination.' 
+    call CombineOutputFiles(rank)
+  End If
   
   EndProg = MPI_WTime()
   call MPI_Finalize(ierr)  ! PHB call Finalize here instead of earlier
@@ -269,13 +286,13 @@ implicit none
       !  modeling for capacity.
 
       ! Read past a few lines
-      Read(30, '(//)')
+      Read(30, '(///)')
       Do i = 1, NPlant
         Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (Pond(i, j), j=1, 14)
         !Print *, TempName, (Pond(i, j), j=1, 14)
         If (Plnt(i) .NE. TempName) Then
           Print *, TempName
-          Print *, 'Did not find  ', Plnt(i), '  in proper sequence (Pond).'
+          Print *, 'Did not find  ', i, ':',  Plnt(i), '  in proper sequence (Pond).'
           Stop
         End If
         Do j = 1, 14
@@ -286,7 +303,7 @@ implicit none
       ! Next read the table of QMIN vs Period...
 
       ! Read past a few lines
-      Read(30, '(//)')
+      Read(30, '(///)')
       Do i = 1, NPlant
         Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (QMinIn(i, j), j=1, 14)
         !Print *, TempName, (QMinIn(i, j), j=1, 14)
@@ -303,7 +320,7 @@ implicit none
       ! Next read the table of Wind Decremental vs Period...
 
       ! Read past a few lines
-      Read(30, '(//)')
+      Read(30, '(///)')
       Do i = 1, NPlant
         Read(30, '(1X,A6,1X,14(2X,F6.0))', Iostat=Eof) TempName, (WindDec(i, j), j=1, 14)
         !Print *, TempName, (WindDec(i, j), j=1, 14)
@@ -1966,8 +1983,18 @@ implicit none
         Write(90, '(1X,I2,1X,I4,1X,A4,3F7.0)') Iper, Iwyr, 'Idah', OtherGenId, OtherOnId, OtherOffId
       End If
     end subroutine
+    subroutine CloseFiles()
+      ! This cleans up and closes all the files.  It should be called before combining files. -- Ben
+      Close(50)
+      Close(60)
+      Close(70)
+      Close(80)
+      Close(90)
+      Close(100)
+      Close(101)
+      Close(102)
+    end subroutine
     subroutine CombineOutputFiles(rank)
-    
 #if defined (__INTEL_COMPILER)
       USE IFPORT   ! PHB for system calls with my compiler
 #endif

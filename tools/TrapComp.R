@@ -1,5 +1,9 @@
 library(ggplot2)
-setwd("Q:/ClusterFiles/Trap2/")
+if(Sys.info()["sysname"] == "Linux") {
+  setwd("/mnt/Q/ClusterFiles/Trap2/")
+} else {
+  setwd("Q:/ClusterFiles/Trap2/")
+}
 hoss <- read.csv("tools/HOSS4hr4KComp.csv", stringsAsFactors=FALSE, header=TRUE)
 names(hoss) <- c("WY", "Period", "Energy", "Peak", "Min")
 hoss$Source <- "HOSS"
