@@ -11,9 +11,3 @@ outputs/*
 # Temporary Files #
 ###################
 *~
-
-# Visual Studio Specific #
-##########################
-debug/*
-*.suo
-*.u2d
