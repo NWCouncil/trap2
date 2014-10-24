@@ -1758,8 +1758,8 @@ implicit none
 
       Inquire(iolength=RecLen) VarValue(1:(VarNum-1))
       LpFile = GetFileDef('LpFile')
-      !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank   
-      Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
+      Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank   
+      !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
       Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
       Write(101, Rec=sys) VarValue(1:(VarNum-1))
 
