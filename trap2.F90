@@ -28,6 +28,7 @@ implicit none
   Real(dp) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
   Real(dp) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
+  Real(dp) :: IncMW(14), DecMW(14)
   Real(dp) :: Pond(PlantCount, 14) 
   Integer :: Iper, Iwyr, StartRegDataNum
   Real(dp) :: PeriodDraft
@@ -49,7 +50,7 @@ implicit none
   
   call GetOutageDerate(OutageProb)
 
-  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec)
+  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
 
   ! The following code takes care of the embarassingly parallel part of this problem using some
   !  basic OpenMPI functionality.  This will allow for this code to be split to up to the number
@@ -225,7 +226,7 @@ implicit none
       End Do
     end subroutine
 
-    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec)
+    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
       Integer :: i, j, Eof
       Character(80) :: SystemFile
       Integer :: NPlant
@@ -238,6 +239,7 @@ implicit none
       Real(dp), Intent(Out) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
       Real(dp), Intent(Out) :: Pond(PlantCount, 14) 
       Real(dp), Intent(Out) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
+      Real(dp), Intent(Out) :: IncMW(14), DecMW(14)
       Logical :: PlantOrderCorrect
 
       SystemFile = GetFileDef('PlantParamsFile')
@@ -341,6 +343,12 @@ implicit none
             PlantOrderCorrect = .FALSE.
           End If
         End Do
+      End Do
+
+      ! Read INC and DEC numbers by Period after reading past a few lines
+      Read(30, '(///)')
+      Do i = 1, 14
+        Read(30, '(1X,3X,2X,F7.0,4X,F7.0)', Iostat=Eof) IncMW(i), DecMW(i)
       End Do
       If (PlantOrderCorrect .EQV. .FALSE.) Then
         Stop
