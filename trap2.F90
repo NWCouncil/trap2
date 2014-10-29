@@ -14,6 +14,8 @@ implicit none
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
     'J DAY ', 'DALLES', 'BONN  '/)
+  Character(6), Parameter :: ResPlantNames(10) = (/'COULEE', 'CH JOE', 'LR.GRN', 'L GOOS', &
+    'LR MON', 'ICE H ', 'MCNARY', 'J DAY ', 'DALLES', 'BONN  '/)
 
   Character(120) :: RawInputsDir, RawOutputsDir
   Character(len=:), allocatable :: InputsDir, OutputsDir
@@ -748,7 +750,7 @@ implicit none
       Character(8) :: ColName(MaxBndLines), BndColName(MaxBndLines)
       Character(8) :: RhsRowName(MaxRhsLines)
       Real(dp) :: RhsRowValue(MaxRhsLines), BndColValue(MaxRhsLines) 
-      Real(dp) :: IncRHSMaxMW
+      Real(dp) :: IncRHSMaxMW, DecRHSMinMW
       Character(2) :: BndColType(MaxBndLines)
       Logical :: FoundDwnstr
       Real(dp) :: Tterm
@@ -1167,6 +1169,8 @@ implicit none
       If (UseMWReserves .EQV. .TRUE.) Then
         Write(99, '(1X, A1, 2X, A3)') 'G', 'INCN'
         Write(99, '(1X, A1, 2X, A3)') 'G', 'INCF'
+        Write(99, '(1X, A1, 2X, A3)') 'G', 'DECN'
+        Write(99, '(1X, A1, 2X, A3)') 'G', 'DECF'
       End If
       ! Put in the objective function
       Write(99, '(1X, A1, 2X, A3)') 'N', 'OBJ'
@@ -1586,18 +1590,31 @@ implicit none
 
           ! Now incorporate the INC and DEC MW logic
           If (UseMWReserves .EQV. .TRUE.) Then
-            MpsRowName(MpsLineNum) = 'INCN'
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-            MpsRowValue(MpsLineNum) = -Hk(i) 
-            MpsLineNum = MpsLineNum + 1
+            If (ResPlantNames(i) .EQ. Plnt(i)) Then
+              MpsRowName(MpsLineNum) = 'INCN'
+              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+              MpsRowValue(MpsLineNum) = -Hk(i) 
+              MpsLineNum = MpsLineNum + 1
 
-            MpsRowName(MpsLineNum) = 'INCF'
-            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-            MpsRowValue(MpsLineNum) = -Hk(i) 
-            MpsLineNum = MpsLineNum + 1
+              MpsRowName(MpsLineNum) = 'INCF'
+              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+              MpsRowValue(MpsLineNum) = -Hk(i) 
+              MpsLineNum = MpsLineNum + 1
 
-            IncRHSMaxMW = IncRHSMaxMW + Hk(i) * FullGte(i)
-            
+              IncRHSMaxMW = IncRHSMaxMW + Hk(i) * FullGte(i)
+
+              MpsRowName(MpsLineNum) = 'DECN'
+              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+              MpsRowValue(MpsLineNum) = Hk(i) 
+              MpsLineNum = MpsLineNum + 1
+
+              MpsRowName(MpsLineNum) = 'DECF'
+              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+              MpsRowValue(MpsLineNum) = Hk(i) 
+              MpsLineNum = MpsLineNum + 1
+
+              DecRHSMinMW = DecRHSMinMW + Hk(i) * QMin(i)
+            End If 
           End If
 
           ! Now fill in objective function values
@@ -1627,6 +1644,14 @@ implicit none
 
       RhsRowName(RhsLineNum) = 'INCF' 
       RhsRowValue(RhsLineNum) = IncMW(Iper) - IncRHSMaxMW
+      RhsLineNum = RhsLineNum + 1
+
+      RhsRowName(RhsLineNum) = 'DECN' 
+      RhsRowValue(RhsLineNum) = IncMW(Iper) + DecRHSMinMW
+      RhsLineNum = RhsLineNum + 1
+
+      RhsRowName(RhsLineNum) = 'DECF' 
+      RhsRowValue(RhsLineNum) = IncMW(Iper) + DecRHSMinMW
       RhsLineNum = RhsLineNum + 1
 
       ! This puts the objective function last
