@@ -8,14 +8,14 @@ use mpi
 implicit none
 
   Integer, Parameter :: dp = kind(1.d0)
-  Logical, Parameter :: UseDecWind = .TRUE.
+  Logical, Parameter :: UseDecWind = .FALSE.
   Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
     'J DAY ', 'DALLES', 'BONN  '/)
-  Character(6), Parameter :: ResPlantNames(10) = (/'COULEE', 'CH JOE', 'LR.GRN', 'L GOOS', &
-    'LR MON', 'ICE H ', 'MCNARY', 'J DAY ', 'DALLES', 'BONN  '/)
+  Character(6), Parameter :: ResPlantNames(5) = (/'COULEE', 'CH JOE', &
+    'MCNARY', 'J DAY ', 'DALLES'/)
 
   Character(120) :: RawInputsDir, RawOutputsDir
   Character(len=:), allocatable :: InputsDir, OutputsDir
