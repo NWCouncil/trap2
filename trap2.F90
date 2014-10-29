@@ -8,7 +8,7 @@ use mpi
 implicit none
 
   Integer, Parameter :: dp = kind(1.d0)
-  Logical, Parameter :: UseDecWind = .FALSE.
+  Logical, Parameter :: UseDecWind = .TRUE.
   Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
