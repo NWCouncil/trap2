@@ -9,6 +9,7 @@ implicit none
 
   Integer, Parameter :: dp = kind(1.d0)
   Logical, Parameter :: UseDecWind = .TRUE.
+  Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
@@ -83,7 +84,8 @@ implicit none
     End If
 
     call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-        HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
+      sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
     call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
@@ -689,7 +691,8 @@ implicit none
     end subroutine 
 
     subroutine BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
+      sys, SolverFiles, Hk, TotalCap)
 
       ! This is an assumption that weekday flows are 110% of weekly average flows
       Real(dp), Parameter :: PerWkday = 1.10
@@ -719,6 +722,7 @@ implicit none
       Integer, Intent(In) :: Iper, Iwyr
       Real(dp), Intent(In) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
       Real(dp), Intent(In) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
+      Real(dp), Intent(In) :: IncMW(14), DecMW(14)
       Integer, Intent(In) :: sys
       Character(80), Intent(Out) :: SolverFiles(80 * 14 * 4)
 
@@ -744,6 +748,7 @@ implicit none
       Character(8) :: ColName(MaxBndLines), BndColName(MaxBndLines)
       Character(8) :: RhsRowName(MaxRhsLines)
       Real(dp) :: RhsRowValue(MaxRhsLines), BndColValue(MaxRhsLines) 
+      Real(dp) :: IncRHSMaxMW
       Character(2) :: BndColType(MaxBndLines)
       Logical :: FoundDwnstr
       Real(dp) :: Tterm
@@ -1159,6 +1164,10 @@ implicit none
       End Do
       !Print *, NRow, ' rows in study'
 
+      If (UseMWReserves .EQV. .TRUE.) Then
+        Write(99, '(1X, A1, 2X, A3)') 'G', 'INCN'
+        Write(99, '(1X, A1, 2X, A3)') 'G', 'INCF'
+      End If
       ! Put in the objective function
       Write(99, '(1X, A1, 2X, A3)') 'N', 'OBJ'
 
@@ -1191,6 +1200,7 @@ implicit none
       !  Note: values not explicitly put into the matrix are assumed to 
       !  be zero by the solver.
       TotalCap = 0
+      IncRHSMaxMW = 0.0
       Do i = 1, PlantCount
         Write(ColName(ColNum), '(A1,I2.2,A2)') 'W', i, 'TN'
         Write(ColName(ColNum + 1), '(A1,I2.2,A2)') 'W', i, 'SN'
@@ -1574,6 +1584,21 @@ implicit none
           BndColValue(BndLineNum) = SMinOff(i)
           BndLineNum = BndLineNum + 1
 
+          ! Now incorporate the INC and DEC MW logic
+          If (UseMWReserves .EQV. .TRUE.) Then
+            MpsRowName(MpsLineNum) = 'INCN'
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+            MpsRowValue(MpsLineNum) = -Hk(i) 
+            MpsLineNum = MpsLineNum + 1
+
+            MpsRowName(MpsLineNum) = 'INCF'
+            Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+            MpsRowValue(MpsLineNum) = -Hk(i) 
+            MpsLineNum = MpsLineNum + 1
+
+            IncRHSMaxMW = IncRHSMaxMW + Hk(i) * FullGte(i)
+            
+          End If
 
           ! Now fill in objective function values
           MpsRowName(MpsLineNum) = 'OBJ'
@@ -1593,6 +1618,17 @@ implicit none
           
         End If
       End Do
+
+      ! These RHS are over multiple plants so handled outside the loop.  These are 
+      !  for reserve constraints.
+      RhsRowName(RhsLineNum) = 'INCN' 
+      RhsRowValue(RhsLineNum) = IncMW(Iper) - IncRHSMaxMW
+      RhsLineNum = RhsLineNum + 1
+
+      RhsRowName(RhsLineNum) = 'INCF' 
+      RhsRowValue(RhsLineNum) = IncMW(Iper) - IncRHSMaxMW
+      RhsLineNum = RhsLineNum + 1
+
       ! This puts the objective function last
       ColName(ColNum) = 'OBJ'
       ColNum = ColNum + 1
