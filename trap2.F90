@@ -8,7 +8,7 @@ use mpi
 implicit none
 
   Integer, Parameter :: dp = kind(1.d0)
-  Logical, Parameter :: UseDecWind = .TRUE.
+  Logical, Parameter :: UseDecWind = .FALSE.
   Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
@@ -1167,10 +1167,10 @@ implicit none
       !Print *, NRow, ' rows in study'
 
       If (UseMWReserves .EQV. .TRUE.) Then
-        Write(99, '(1X, A1, 2X, A3)') 'G', 'INCN'
-        Write(99, '(1X, A1, 2X, A3)') 'G', 'INCF'
-        Write(99, '(1X, A1, 2X, A3)') 'G', 'DECN'
-        Write(99, '(1X, A1, 2X, A3)') 'G', 'DECF'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCN'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCF'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECN'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECF'
       End If
       ! Put in the objective function
       Write(99, '(1X, A1, 2X, A3)') 'N', 'OBJ'
@@ -1590,31 +1590,33 @@ implicit none
 
           ! Now incorporate the INC and DEC MW logic
           If (UseMWReserves .EQV. .TRUE.) Then
-            If (ResPlantNames(i) .EQ. Plnt(i)) Then
-              MpsRowName(MpsLineNum) = 'INCN'
-              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-              MpsRowValue(MpsLineNum) = -Hk(i) 
-              MpsLineNum = MpsLineNum + 1
+            Do j = 1, 5
+              If (ResPlantNames(j) .EQ. Plnt(i)) Then
+                MpsRowName(MpsLineNum) = 'INCN'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                MpsRowValue(MpsLineNum) = -Hk(i) 
+                MpsLineNum = MpsLineNum + 1
 
-              MpsRowName(MpsLineNum) = 'INCF'
-              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-              MpsRowValue(MpsLineNum) = -Hk(i) 
-              MpsLineNum = MpsLineNum + 1
+                MpsRowName(MpsLineNum) = 'INCF'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                MpsRowValue(MpsLineNum) = -Hk(i) 
+                MpsLineNum = MpsLineNum + 1
 
-              IncRHSMaxMW = IncRHSMaxMW + Hk(i) * FullGte(i)
+                IncRHSMaxMW = IncRHSMaxMW + Hk(i) * FullGte(i) 
 
-              MpsRowName(MpsLineNum) = 'DECN'
-              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-              MpsRowValue(MpsLineNum) = Hk(i) 
-              MpsLineNum = MpsLineNum + 1
+                MpsRowName(MpsLineNum) = 'DECN'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                MpsRowValue(MpsLineNum) = Hk(i) 
+                MpsLineNum = MpsLineNum + 1
 
-              MpsRowName(MpsLineNum) = 'DECF'
-              Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-              MpsRowValue(MpsLineNum) = Hk(i) 
-              MpsLineNum = MpsLineNum + 1
+                MpsRowName(MpsLineNum) = 'DECF'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                MpsRowValue(MpsLineNum) = Hk(i) 
+                MpsLineNum = MpsLineNum + 1
 
-              DecRHSMinMW = DecRHSMinMW + Hk(i) * QMin(i)
-            End If 
+                DecRHSMinMW = DecRHSMinMW + Hk(i) * QMin(i) 
+              End If 
+            End Do
           End If
 
           ! Now fill in objective function values
@@ -1636,23 +1638,25 @@ implicit none
         End If
       End Do
 
-      ! These RHS are over multiple plants so handled outside the loop.  These are 
-      !  for reserve constraints.
-      RhsRowName(RhsLineNum) = 'INCN' 
-      RhsRowValue(RhsLineNum) = IncMW(Iper) - IncRHSMaxMW
-      RhsLineNum = RhsLineNum + 1
+      If (UseMWReserves .EQV. .TRUE.) Then
+        ! These RHS are over multiple plants so handled outside the loop.  These are 
+        !  for reserve constraints.
+        RhsRowName(RhsLineNum) = 'INCN' 
+        RhsRowValue(RhsLineNum) = IncMW(Iper) * 1000 - IncRHSMaxMW
+        RhsLineNum = RhsLineNum + 1
 
-      RhsRowName(RhsLineNum) = 'INCF' 
-      RhsRowValue(RhsLineNum) = IncMW(Iper) - IncRHSMaxMW
-      RhsLineNum = RhsLineNum + 1
+        RhsRowName(RhsLineNum) = 'INCF' 
+        RhsRowValue(RhsLineNum) = IncMW(Iper) * 1000 - IncRHSMaxMW
+        RhsLineNum = RhsLineNum + 1
 
-      RhsRowName(RhsLineNum) = 'DECN' 
-      RhsRowValue(RhsLineNum) = IncMW(Iper) + DecRHSMinMW
-      RhsLineNum = RhsLineNum + 1
+        RhsRowName(RhsLineNum) = 'DECN' 
+        RhsRowValue(RhsLineNum) = DecMW(Iper) * 1000 + DecRHSMinMW
+        RhsLineNum = RhsLineNum + 1
 
-      RhsRowName(RhsLineNum) = 'DECF' 
-      RhsRowValue(RhsLineNum) = IncMW(Iper) + DecRHSMinMW
-      RhsLineNum = RhsLineNum + 1
+        RhsRowName(RhsLineNum) = 'DECF' 
+        RhsRowValue(RhsLineNum) = DecMW(Iper) * 1000 + DecRHSMinMW
+        RhsLineNum = RhsLineNum + 1
+      End If
 
       ! This puts the objective function last
       ColName(ColNum) = 'OBJ'
