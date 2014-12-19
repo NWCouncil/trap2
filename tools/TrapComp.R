@@ -12,7 +12,7 @@ names(rods) <- c("WY", "Period", "Energy", "Peak", "Min")
 rods$Source <- "Historic"
 comb <- rbind(hoss, rods)
 
-trap <- read.fwf("outputs/run 4K-4hr-50pct.OUT", widths=c(4, 8, rep(7, 11), 5), skip=3)
+trap <- read.fwf("outputs/4K-4hr-2KRES-NoDec.OUT", widths=c(4, 8, rep(7, 11), 5), skip=3)
 names(trap) <- c("PER", "TM_E", "EON", "EOFF", "TM_W", "WON", "WOFF", "TM_I", "IDON", "IDOFF", "TM_FD", "FDON", "FDOFF", "IWY")
 trap$OUT <- rep(seq(1,4), length(trap[,1])/4)
 trap.avg <- aggregate(cbind(TM_FD, FDON, FDOFF) ~ IWY + PER, data=trap, FUN=mean)
