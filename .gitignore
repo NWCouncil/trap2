@@ -15,5 +15,6 @@ outputs/*
 # Visual Studio Specific #
 ##########################
 debug/*
+release/*
 *.suo
 *.u2d
