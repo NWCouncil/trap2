@@ -11,6 +11,7 @@ outputs/*
 # Temporary Files #
 ###################
 *~
+*.swp
 
 # Visual Studio Specific #
 ##########################
