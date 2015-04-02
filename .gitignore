@@ -17,5 +17,7 @@ outputs/*
 ##########################
 debug/*
 release/*
+installer/release/*
+installer/debug/*
 *.suo
 *.u2d
