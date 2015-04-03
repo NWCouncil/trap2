@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{6989167D-11E4-40FE-8C1A-2192A86A7E90}") = "trap2", "trap2.vfproj", "{8BF2358D-4F21-47BE-8A81-2190F489D4EF}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "trap2Installer", "Installer\trap2Installer.vdproj", "{C3BA7203-D0FD-4306-B1AD-5FCCFBCB20E6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -13,6 +15,9 @@ Global
 		{8BF2358D-4F21-47BE-8A81-2190F489D4EF}.Debug|Win32.Build.0 = Debug|Win32
 		{8BF2358D-4F21-47BE-8A81-2190F489D4EF}.Release|Win32.ActiveCfg = Release|Win32
 		{8BF2358D-4F21-47BE-8A81-2190F489D4EF}.Release|Win32.Build.0 = Release|Win32
+		{C3BA7203-D0FD-4306-B1AD-5FCCFBCB20E6}.Debug|Win32.ActiveCfg = Debug
+		{C3BA7203-D0FD-4306-B1AD-5FCCFBCB20E6}.Release|Win32.ActiveCfg = Release
+		{C3BA7203-D0FD-4306-B1AD-5FCCFBCB20E6}.Release|Win32.Build.0 = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

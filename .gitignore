@@ -11,10 +11,13 @@ outputs/*
 # Temporary Files #
 ###################
 *~
+*.swp
 
 # Visual Studio Specific #
 ##########################
 debug/*
 release/*
+installer/release/*
+installer/debug/*
 *.suo
 *.u2d
