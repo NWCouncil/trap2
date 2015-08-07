@@ -14,8 +14,9 @@ implicit none
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
     'J DAY ', 'DALLES', 'BONN  '/)
-  Character(6), Parameter :: ResPlantNames(5) = (/'COULEE', 'CH JOE', &
+  Character(6), Parameter :: Res1PlantNames(5) = (/'COULEE', 'CH JOE', &
     'MCNARY', 'J DAY ', 'DALLES'/)
+  Character(6), Parameter :: Res2PlantNames(2) = (/'KERR  ', 'THOM F'/)
 
   Character(120) :: RawInputsDir, RawOutputsDir
   Character(len=:), allocatable :: InputsDir, OutputsDir
@@ -31,7 +32,7 @@ implicit none
   Real(dp) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
   Real(dp) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
-  Real(dp) :: IncMW(14), DecMW(14)
+  Real(dp) :: IncMW1(14), DecMW1(14), IncMW2(14), DecMW2(14)
   Real(dp) :: Pond(PlantCount, 14) 
   Integer :: Iper, Iwyr, StartRegDataNum
   Real(dp) :: PeriodDraft
@@ -53,7 +54,7 @@ implicit none
   
   call GetOutageDerate(OutageProb)
 
-  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
+  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW1, DecMW1, IncMW2, DecMW2)
 
   ! The following code takes care of the embarassingly parallel part of this problem using some
   !  basic OpenMPI functionality.  This will allow for this code to be split to up to the number
@@ -86,8 +87,8 @@ implicit none
     End If
 
     call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
-      sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW1, DecMW1, &
+      IncMW2, DecMW2, sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
     call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
@@ -230,7 +231,7 @@ implicit none
       End Do
     end subroutine
 
-    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
+    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW1, DecMW1, IncMW2, DecMW2)
       Integer :: i, j, Eof
       Character(80) :: SystemFile
       Integer :: NPlant
@@ -243,7 +244,7 @@ implicit none
       Real(dp), Intent(Out) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
       Real(dp), Intent(Out) :: Pond(PlantCount, 14) 
       Real(dp), Intent(Out) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
-      Real(dp), Intent(Out) :: IncMW(14), DecMW(14)
+      Real(dp), Intent(Out) :: IncMW1(14), DecMW1(14), IncMW2(14), DecMW2(14)
       Logical :: PlantOrderCorrect
 
       SystemFile = GetFileDef('PlantParamsFile')
@@ -352,7 +353,7 @@ implicit none
       ! Read INC and DEC numbers by Period after reading past a few lines
       Read(30, '(///)')
       Do i = 1, 14
-        Read(30, '(1X,3X,2X,F7.0,4X,F7.0)', Iostat=Eof) IncMW(i), DecMW(i)
+        Read(30, '(1X,3X,2X,F7.0,3(4X,F7.0))', Iostat=Eof) IncMW1(i), DecMW1(i), IncMW2(i), DecMW2(i)
       End Do
       If (PlantOrderCorrect .EQV. .FALSE.) Then
         Stop
@@ -693,8 +694,8 @@ implicit none
     end subroutine 
 
     subroutine BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
-      sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW1, DecMW1, &
+      IncMW2, DecMW2, sys, SolverFiles, Hk, TotalCap)
 
       ! This is an assumption that weekday flows are 110% of weekly average flows
       Real(dp), Parameter :: PerWkday = 1.10
@@ -724,7 +725,7 @@ implicit none
       Integer, Intent(In) :: Iper, Iwyr
       Real(dp), Intent(In) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
       Real(dp), Intent(In) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
-      Real(dp), Intent(In) :: IncMW(14), DecMW(14)
+      Real(dp), Intent(In) :: IncMW1(14), DecMW1(14), IncMW2(14), DecMW2(14)
       Integer, Intent(In) :: sys
       Character(80), Intent(Out) :: SolverFiles(80 * 14 * 4)
 
@@ -750,7 +751,7 @@ implicit none
       Character(8) :: ColName(MaxBndLines), BndColName(MaxBndLines)
       Character(8) :: RhsRowName(MaxRhsLines)
       Real(dp) :: RhsRowValue(MaxRhsLines), BndColValue(MaxRhsLines) 
-      Real(dp) :: IncRHSMaxMW, DecRHSMinMW
+      Real(dp) :: IncRHSMaxMW1, DecRHSMinMW1, IncRHSMaxMW2, DecRHSMinMW2
       Character(2) :: BndColType(MaxBndLines)
       Logical :: FoundDwnstr
       Real(dp) :: Tterm
@@ -1167,10 +1168,10 @@ implicit none
       !Print *, NRow, ' rows in study'
 
       If (UseMWReserves .EQV. .TRUE.) Then
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCN'
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCF'
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECN'
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECF'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCN1'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCF1'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECN1'
+        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECF1'
       End If
       ! Put in the objective function
       Write(99, '(1X, A1, 2X, A3)') 'N', 'OBJ'
@@ -1204,7 +1205,7 @@ implicit none
       !  Note: values not explicitly put into the matrix are assumed to 
       !  be zero by the solver.
       TotalCap = 0
-      IncRHSMaxMW = 0.0
+      IncRHSMaxMW1 = 0.0
       Do i = 1, PlantCount
         Write(ColName(ColNum), '(A1,I2.2,A2)') 'W', i, 'TN'
         Write(ColName(ColNum + 1), '(A1,I2.2,A2)') 'W', i, 'SN'
@@ -1591,31 +1592,59 @@ implicit none
           ! Now incorporate the INC and DEC MW logic
           If (UseMWReserves .EQV. .TRUE.) Then
             Do j = 1, 5
-              If (ResPlantNames(j) .EQ. Plnt(i)) Then
-                MpsRowName(MpsLineNum) = 'INCN'
+              If (Res1PlantNames(j) .EQ. Plnt(i)) Then
+                MpsRowName(MpsLineNum) = 'INCN1'
                 Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
                 MpsRowValue(MpsLineNum) = -Hk(i) 
                 MpsLineNum = MpsLineNum + 1
 
-                MpsRowName(MpsLineNum) = 'INCF'
+                MpsRowName(MpsLineNum) = 'INCF1'
                 Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
                 MpsRowValue(MpsLineNum) = -Hk(i) 
                 MpsLineNum = MpsLineNum + 1
 
-                IncRHSMaxMW = IncRHSMaxMW + Hk(i) * FullGte(i) 
+                IncRHSMaxMW1 = IncRHSMaxMW1 + Hk(i) * FullGte(i) 
 
-                MpsRowName(MpsLineNum) = 'DECN'
+                MpsRowName(MpsLineNum) = 'DECN1'
                 Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
                 MpsRowValue(MpsLineNum) = Hk(i) 
                 MpsLineNum = MpsLineNum + 1
 
-                MpsRowName(MpsLineNum) = 'DECF'
+                MpsRowName(MpsLineNum) = 'DECF1'
                 Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
                 MpsRowValue(MpsLineNum) = Hk(i) 
                 MpsLineNum = MpsLineNum + 1
 
-                DecRHSMinMW = DecRHSMinMW + Hk(i) * QMin(i) 
+                DecRHSMinMW1 = DecRHSMinMW1 + Hk(i) * QMin(i) 
               End If 
+            End Do
+            Do j = 1, 2
+              If (Res2PlantNames(j) .EQ. Plnt(i)) Then
+                ! Add second reserve pool logic here
+                MpsRowName(MpsLineNum) = 'INCN2'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                MpsRowValue(MpsLineNum) = -Hk(i) 
+                MpsLineNum = MpsLineNum + 1
+
+                MpsRowName(MpsLineNum) = 'INCF2'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                MpsRowValue(MpsLineNum) = -Hk(i) 
+                MpsLineNum = MpsLineNum + 1
+
+                IncRHSMaxMW2 = IncRHSMaxMW2 + Hk(i) * FullGte(i) 
+
+                MpsRowName(MpsLineNum) = 'DECN2'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                MpsRowValue(MpsLineNum) = Hk(i) 
+                MpsLineNum = MpsLineNum + 1
+
+                MpsRowName(MpsLineNum) = 'DECF2'
+                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                MpsRowValue(MpsLineNum) = Hk(i) 
+                MpsLineNum = MpsLineNum + 1
+
+                DecRHSMinMW2 = DecRHSMinMW2 + Hk(i) * QMin(i)                     
+                End If
             End Do
           End If
 
@@ -1641,21 +1670,37 @@ implicit none
       If (UseMWReserves .EQV. .TRUE.) Then
         ! These RHS are over multiple plants so handled outside the loop.  These are 
         !  for reserve constraints.
-        RhsRowName(RhsLineNum) = 'INCN' 
-        RhsRowValue(RhsLineNum) = IncMW(Iper) * 1000 - IncRHSMaxMW
+        RhsRowName(RhsLineNum) = 'INCN1' 
+        RhsRowValue(RhsLineNum) = IncMW1(Iper) * 1000 - IncRHSMaxMW1
         RhsLineNum = RhsLineNum + 1
 
-        RhsRowName(RhsLineNum) = 'INCF' 
-        RhsRowValue(RhsLineNum) = IncMW(Iper) * 1000 - IncRHSMaxMW
+        RhsRowName(RhsLineNum) = 'INCF1' 
+        RhsRowValue(RhsLineNum) = IncMW1(Iper) * 1000 - IncRHSMaxMW1
         RhsLineNum = RhsLineNum + 1
 
-        RhsRowName(RhsLineNum) = 'DECN' 
-        RhsRowValue(RhsLineNum) = DecMW(Iper) * 1000 + DecRHSMinMW
+        RhsRowName(RhsLineNum) = 'DECN1' 
+        RhsRowValue(RhsLineNum) = DecMW1(Iper) * 1000 + DecRHSMinMW1
         RhsLineNum = RhsLineNum + 1
 
-        RhsRowName(RhsLineNum) = 'DECF' 
-        RhsRowValue(RhsLineNum) = DecMW(Iper) * 1000 + DecRHSMinMW
+        RhsRowName(RhsLineNum) = 'DECF1' 
+        RhsRowValue(RhsLineNum) = DecMW1(Iper) * 1000 + DecRHSMinMW1
         RhsLineNum = RhsLineNum + 1
+        
+        RhsRowName(RhsLineNum) = 'INCN2' 
+        RhsRowValue(RhsLineNum) = IncMW2(Iper) * 1000 - IncRHSMaxMW2
+        RhsLineNum = RhsLineNum + 1
+
+        RhsRowName(RhsLineNum) = 'INCF2' 
+        RhsRowValue(RhsLineNum) = IncMW2(Iper) * 1000 - IncRHSMaxMW2
+        RhsLineNum = RhsLineNum + 1
+
+        RhsRowName(RhsLineNum) = 'DECN2' 
+        RhsRowValue(RhsLineNum) = DecMW2(Iper) * 1000 + DecRHSMinMW2
+        RhsLineNum = RhsLineNum + 1
+
+        RhsRowName(RhsLineNum) = 'DECF2' 
+        RhsRowValue(RhsLineNum) = DecMW2(Iper) * 1000 + DecRHSMinMW2
+        RhsLineNum = RhsLineNum + 1        
       End If
 
       ! This puts the objective function last
