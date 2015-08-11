@@ -4,7 +4,7 @@
 "FOR/MaintFile","FOR.DAT"
 "PlantParamsFile","SYSTEM 4K.DEF"
 "ReserveFile","trap 2019 Reserves.OUT"
-"OutputFile","4K-4hr-BPARES-NoDec.OUT"
+"OutputFile","4K-4hr-BPARES.OUT"
 "NumberofPkHours",4
 "OptionStudy","Special 6K-4hr"
 "LpFile","LP.OUT"
