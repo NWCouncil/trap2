@@ -15,6 +15,24 @@
     {
         "Entry"
         {
+        "MsmKey" = "8:_057CFEA291B24E03AB852D37B70EFE5D"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_1F1C29FED0084054A87F3C56F8803EE6"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_2348D84C12E94C0EA7833E4466938AF4"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_3F6E8A5F2FDD49F68F389324471863AE"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -45,7 +63,31 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_C556B616C410430985E07DC22A8274FD"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_CA1223A8456848F1A051524C4EF7A1D9"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_D2234F547E674DC4A36B3FE392B037E9"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_D50BCF4DA6AE4638AAD731B974B28630"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_E9836EC4DC5448C5B4CB75AF0CFAA0C7"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -108,7 +150,7 @@
             {
             "Enabled" = "11:TRUE"
             "PromptEnabled" = "11:TRUE"
-            "PrerequisitesLocation" = "2:3"
+            "PrerequisitesLocation" = "2:1"
             "Url" = "8:"
             "ComponentsUrl" = "8:http://www.microsoft.com/en-us/download/details.aspx?id=44990"
                 "Items"
@@ -146,6 +188,66 @@
         }
         "File"
         {
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_057CFEA291B24E03AB852D37B70EFE5D"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\vcredist_x86.exe"
+            "TargetName" = "8:vcredist_x86.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_1F1C29FED0084054A87F3C56F8803EE6"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\vcredist_x64.exe"
+            "TargetName" = "8:vcredist_x64.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_2348D84C12E94C0EA7833E4466938AF4"
+            {
+            "SourcePath" = "8:C:\\Program Files\\nwcouncil.org\\TRAP2\\outputs\\mps\\1929011.mps"
+            "TargetName" = "8:1929011.mps"
+            "Tag" = "8:"
+            "Folder" = "8:_BC59D9B69D99478C87D8C789CECAC353"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3F6E8A5F2FDD49F68F389324471863AE"
             {
             "SourcePath" = "8:..\\inputs\\BPAREGU 2019 for TRAP.OUT"
@@ -206,12 +308,92 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_C556B616C410430985E07DC22A8274FD"
+            {
+            "SourcePath" = "8:C:\\Program Files\\nwcouncil.org\\TRAP2\\outputs\\mpiout\\trap 2019 Reserves.OUT-0000"
+            "TargetName" = "8:trap 2019 Reserves.OUT-0000"
+            "Tag" = "8:"
+            "Folder" = "8:_9AA1901C86FE48C092F3407339C1248D"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_CA1223A8456848F1A051524C4EF7A1D9"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\MSMPISetup.exe"
+            "TargetName" = "8:MSMPISetup.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_D2234F547E674DC4A36B3FE392B037E9"
             {
             "SourcePath" = "8:..\\inputs\\FOR.DAT"
             "TargetName" = "8:FOR.DAT"
             "Tag" = "8:"
             "Folder" = "8:_CB40AF47C60C4EF5A344D11DEAC00263"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_D50BCF4DA6AE4638AAD731B974B28630"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\lp_solve_5.5.2.0_exe_win32.zip"
+            "TargetName" = "8:lp_solve_5.5.2.0_exe_win32.zip"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_E9836EC4DC5448C5B4CB75AF0CFAA0C7"
+            {
+            "SourcePath" = "8:C:\\Program Files\\nwcouncil.org\\TRAP2\\outputs\\lpout\\1929011.out"
+            "TargetName" = "8:1929011.out"
+            "Tag" = "8:"
+            "Folder" = "8:_88567DA318294B208B905861828227D9"
             "Condition" = "8:"
             "Transitive" = "11:FALSE"
             "Vital" = "11:TRUE"
@@ -256,7 +438,7 @@
             }
             "{3C67513D-01DD-4637-8A68-80971EB9504F}:_C53C34C32BDC4737BD60B195F5BB55EA"
             {
-            "DefaultLocation" = "8:[ProgramFilesFolder][Manufacturer]\\[ProductName]"
+            "DefaultLocation" = "8:[WindowsVolume][Manufacturer]\\[ProductName]"
             "Name" = "8:#1925"
             "AlwaysCreate" = "11:FALSE"
             "Condition" = "8:"
@@ -308,6 +490,17 @@
                             }
                         }
                     }
+                    "{9EF0B969-E518-4E46-987F-47570745A589}:_3DE5A46887214BA3BF79CF8BDEE5078B"
+                    {
+                    "Name" = "8:Dependencies"
+                    "AlwaysCreate" = "11:FALSE"
+                    "Condition" = "8:"
+                    "Transitive" = "11:FALSE"
+                    "Property" = "8:_BCFF759951C04A11A5C3ECF104CA6852"
+                        "Folders"
+                        {
+                        }
+                    }
                     "{9EF0B969-E518-4E46-987F-47570745A589}:_CB40AF47C60C4EF5A344D11DEAC00263"
                     {
                     "Name" = "8:inputs"
@@ -337,15 +530,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:TRAP2"
-        "ProductCode" = "8:{A7BD7C6D-A192-4D07-AA8B-877207DEE493}"
-        "PackageCode" = "8:{D3ACF6B1-EF78-417A-9C34-C4B67416F19A}"
+        "ProductCode" = "8:{748ED061-F34B-4980-994F-58846B944EBC}"
+        "PackageCode" = "8:{FFB6E562-70B5-4130-A691-E4A3E8122D66}"
         "UpgradeCode" = "8:{5D0E4D59-E50B-4D72-AEB5-F71046C3C1F1}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
-        "RemovePreviousVersions" = "11:FALSE"
+        "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
-        "InstallAllUsers" = "11:FALSE"
-        "ProductVersion" = "8:2.0.4"
+        "InstallAllUsers" = "11:TRUE"
+        "ProductVersion" = "8:2.0.018"
         "Manufacturer" = "8:nwcouncil.org"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
