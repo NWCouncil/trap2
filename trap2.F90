@@ -12,8 +12,8 @@ implicit none
   Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
   Integer, Parameter :: BACount = (8 + 1)
-  Integer, Parameter :: ResPlantCount(9) = (/0, 5, 2, 3, 6, 2, 4, 2, 1/)  
-  Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
+  Integer, Parameter :: ResPlantCount(1:8) = (/5, 2, 3, 6, 2, 4, 2, 1/)  
+  Character(6), Parameter :: FedPlantNames(1:14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
     'J DAY ', 'DALLES', 'BONN  '/)
 
@@ -363,14 +363,14 @@ implicit none
       ! Read INC and DEC numbers by Period after reading past a few lines
       Read(30, '(///)')
       Do i = 1, 14
-        Read(30, '(1X,3X,10(2X,F7.0))', Iostat=Eof) IncMW(1, i), IncMW(2, i), IncMW(3, i), IncMW(4, i), &
-            & IncMW(5, i), IncMW(6, i), IncMW(7, i), IncMW(8, i), IncMW(9, i), IncMW(10, i)
+        Read(30, '(1X,3X,8(2X,F7.0))', Iostat=Eof) IncMW(1, i), IncMW(2, i), IncMW(3, i), IncMW(4, i), &
+            & IncMW(5, i), IncMW(6, i), IncMW(7, i), IncMW(8, i)
       End Do
       Read(30, '(///)')
       Do i = 1, 14
-        Read(30, '(1X,3X,10(2X,F7.0))', Iostat=Eof) DecMW(1, i), DecMW(2, i), DecMW(3, i), DecMW(4, i), &
-            & DecMW(5, i), DecMW(6, i), DecMW(7, i), DecMW(8, i), DecMW(9, i), DecMW(10, i)
-      End Do      
+        Read(30, '(1X,3X,8(2X,F7.0))', Iostat=Eof) DecMW(1, i), DecMW(2, i), DecMW(3, i), DecMW(4, i), &
+            & DecMW(5, i), DecMW(6, i), DecMW(7, i), DecMW(8, i)
+      End Do    
       If (PlantOrderCorrect .EQV. .FALSE.) Then
         Stop
       End If
@@ -1184,7 +1184,8 @@ implicit none
       !Print *, NRow, ' rows in study'
 
       If (UseMWReserves .EQV. .TRUE.) Then
-        Do i = 1, BACount
+        Write(99, '(A10)') '* RESERVES'
+        Do i = 1, BACount - 1
           Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'INCN', i
           Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'INCF', i
           Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'DECN', i
@@ -1223,7 +1224,7 @@ implicit none
       !  Note: values not explicitly put into the matrix are assumed to 
       !  be zero by the solver.
       TotalCap = 0
-      Do i = 1, BACount
+      Do i = 1, BACount - 1
         IncRHSMaxMW(i) = 0.0
         DecRHSMinMW(i) = 0.0
       End Do
@@ -1612,7 +1613,7 @@ implicit none
 
           ! Now incorporate the INC and DEC MW logic
           If (UseMWReserves .EQV. .TRUE.) Then
-            Do j = 1, BACount
+            Do j = 1, BACount - 1
               Do k = 1, ResPlantCount(j)
                 If (ResPlantNames(j, k) .EQ. Plnt(i)) Then
                   Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'INCN', j
@@ -1665,7 +1666,7 @@ implicit none
       If (UseMWReserves .EQV. .TRUE.) Then
         ! These RHS are over multiple plants so handled outside the loop.  These are 
         !  for reserve constraints.
-        Do i = 1, BACount
+        Do i = 1, BACount - 1 
             Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCN', i 
             RhsRowValue(RhsLineNum) = IncMW(i, Iper) * 1000 - IncRHSMaxMW(i)
             RhsLineNum = RhsLineNum + 1

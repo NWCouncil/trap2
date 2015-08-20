@@ -160,16 +160,6 @@
                     "Name" = "8:Microsoft .NET Framework 4 Client Profile (x86 and x64)"
                     "ProductCode" = "8:.NETFramework,Version=v4.0,Profile=Client"
                     }
-                    "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:Microsoft.Visual.C++.10.0.x64"
-                    {
-                    "Name" = "8:Visual C++ 2010 Runtime Libraries (x64)"
-                    "ProductCode" = "8:Microsoft.Visual.C++.10.0.x64"
-                    }
-                    "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:Microsoft.Visual.C++.10.0.x86"
-                    {
-                    "Name" = "8:Visual C++ 2010 Runtime Libraries (x86)"
-                    "ProductCode" = "8:Microsoft.Visual.C++.10.0.x86"
-                    }
                     "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:Microsoft.Windows.Installer.3.1"
                     {
                     "Name" = "8:Windows Installer 3.1"
@@ -540,15 +530,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:TRAP2"
-        "ProductCode" = "8:{EACCE2B2-6065-441D-A425-C4764D22419F}"
-        "PackageCode" = "8:{F3F9BF23-349D-4B65-BF6D-6AD9CC8A84C9}"
+        "ProductCode" = "8:{748ED061-F34B-4980-994F-58846B944EBC}"
+        "PackageCode" = "8:{FFB6E562-70B5-4130-A691-E4A3E8122D66}"
         "UpgradeCode" = "8:{5D0E4D59-E50B-4D72-AEB5-F71046C3C1F1}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:2.0.010"
+        "ProductVersion" = "8:2.0.018"
         "Manufacturer" = "8:nwcouncil.org"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
