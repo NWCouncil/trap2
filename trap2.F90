@@ -11,13 +11,13 @@ implicit none
   Logical, Parameter :: UseDecWind = .FALSE.
   Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
+  Integer, Parameter :: BACount = (8 + 1)
+  Integer, Parameter :: ResPlantCount(9) = (/0, 5, 2, 3, 6, 2, 4, 2, 1/)  
   Character(6), Parameter :: FedPlantNames(14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
     'J DAY ', 'DALLES', 'BONN  '/)
-  Character(6), Parameter :: Res1PlantNames(5) = (/'COULEE', 'CH JOE', &
-    'MCNARY', 'J DAY ', 'DALLES'/)
-  Character(6), Parameter :: Res2PlantNames(2) = (/'KERR  ', 'THOM F'/)
 
+  Character(6) :: ResPlantNames(BACount, 6)
   Character(120) :: RawInputsDir, RawOutputsDir
   Character(len=:), allocatable :: InputsDir, OutputsDir
   Integer :: rank, comsize, ierr, sys
@@ -32,7 +32,7 @@ implicit none
   Real(dp) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
   Real(dp) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
-  Real(dp) :: IncMW1(14), DecMW1(14), IncMW2(14), DecMW2(14)
+  Real(dp) :: IncMW(BACount, 14), DecMW(BACount, 14)
   Real(dp) :: Pond(PlantCount, 14) 
   Integer :: Iper, Iwyr, StartRegDataNum
   Real(dp) :: PeriodDraft
@@ -47,6 +47,16 @@ implicit none
   call MPI_Init(ierr)  ! PHB call Init here instead of earlier
   StartProg = MPI_WTime()
 
+  ! Setup all pools for reserves
+  ResPlantNames(1, 1:5) = (/'COULEE', 'CH JOE', 'MCNARY', 'J DAY ', 'DALLES'/) ! BPA
+  ResPlantNames(2, 1:2) = (/'NOXON ', 'CAB G '/) ! Avista
+  ResPlantNames(3, 1:3) = (/'BRNLEE', 'HELL C', 'OXBOW'/) ! Idaho Power
+  ResPlantNames(4, 1:6) = (/'WELLS ', 'R RECH', 'ROCK I', 'CHELAN', 'PRIEST', 'WANAP '/) ! Mid-C
+  ResPlantNames(5, 1:2) = (/'KERR  ', 'THOM F '/) ! Northwestern
+  ResPlantNames(6, 1:4) = (/'MERWIN', 'YALE  ', 'SWFT 1', 'SWFT 2'/) ! PacifiCorp
+  ResPlantNames(7, 1:2) = (/'PELTON', 'RND B '/)
+  ResPlantNames(8, 1) = 'BOUND'  
+  
   RawInputsDir = GetFileDef('InputsDir')
   InputsDir = Trim(RawInputsDir)
   RawOutputsDir = GetFileDef('OutputsDir')
@@ -54,7 +64,7 @@ implicit none
   
   call GetOutageDerate(OutageProb)
 
-  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW1, DecMW1, IncMW2, DecMW2)
+  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
 
   ! The following code takes care of the embarassingly parallel part of this problem using some
   !  basic OpenMPI functionality.  This will allow for this code to be split to up to the number
@@ -87,8 +97,8 @@ implicit none
     End If
 
     call BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW1, DecMW1, &
-      IncMW2, DecMW2, sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
+      sys, SolverFiles, Hk, TotalCap)
 
     Print '(I4, A, I4.4)', rank, ': Processing system ', sys
     call RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
@@ -231,7 +241,7 @@ implicit none
       End Do
     end subroutine
 
-    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW1, DecMW1, IncMW2, DecMW2)
+    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
       Integer :: i, j, Eof
       Character(80) :: SystemFile
       Integer :: NPlant
@@ -244,7 +254,7 @@ implicit none
       Real(dp), Intent(Out) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
       Real(dp), Intent(Out) :: Pond(PlantCount, 14) 
       Real(dp), Intent(Out) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
-      Real(dp), Intent(Out) :: IncMW1(14), DecMW1(14), IncMW2(14), DecMW2(14)
+      Real(dp), Intent(Out) :: IncMW(BACount, 14), DecMW(BACount, 14)
       Logical :: PlantOrderCorrect
 
       SystemFile = GetFileDef('PlantParamsFile')
@@ -353,8 +363,14 @@ implicit none
       ! Read INC and DEC numbers by Period after reading past a few lines
       Read(30, '(///)')
       Do i = 1, 14
-        Read(30, '(1X,3X,2X,F7.0,3(4X,F7.0))', Iostat=Eof) IncMW1(i), DecMW1(i), IncMW2(i), DecMW2(i)
+        Read(30, '(1X,3X,10(2X,F7.0))', Iostat=Eof) IncMW(1, i), IncMW(2, i), IncMW(3, i), IncMW(4, i), &
+            & IncMW(5, i), IncMW(6, i), IncMW(7, i), IncMW(8, i), IncMW(9, i), IncMW(10, i)
       End Do
+      Read(30, '(///)')
+      Do i = 1, 14
+        Read(30, '(1X,3X,10(2X,F7.0))', Iostat=Eof) DecMW(1, i), DecMW(2, i), DecMW(3, i), DecMW(4, i), &
+            & DecMW(5, i), DecMW(6, i), DecMW(7, i), DecMW(8, i), DecMW(9, i), DecMW(10, i)
+      End Do      
       If (PlantOrderCorrect .EQV. .FALSE.) Then
         Stop
       End If
@@ -583,7 +599,7 @@ implicit none
                 Write(70, FormatString) Iper, Iwyr, 'LR.GRN TQOut < Gas Cap', TQOut, GasCap
               End If
               ! Use GasCap - 100 for min and GasCap + 100 for max to allow for the LP to Solve
-              SMinOff(i) = AMin1(GasCap - 100., TQOut)
+              SMinOff(i) = Min(GasCap - 100., TQOut)
               SMinOn(i) = SMinOff(i)
               ! If total flow is under 65000 in May then no spill requirement
 !              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
@@ -606,7 +622,7 @@ implicit none
               If (TQOut .LT. GasCap - 100.) Then
                 Write(70, FormatString) Iper, Iwyr, 'LR MON TQout < Gas Cap', TQOut, GasCap
               End If
-              SMinOff(i) = AMin1(GasCap - 100., TQOut)
+              SMinOff(i) = Min(GasCap - 100., TQOut)
               SMinOn(i) = SMinOff(i)
               ! If total flow is under 65000 in May then no spill requirement
 !              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
@@ -694,8 +710,8 @@ implicit none
     end subroutine 
 
     subroutine BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
-      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW1, DecMW1, &
-      IncMW2, DecMW2, sys, SolverFiles, Hk, TotalCap)
+      HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
+      sys, SolverFiles, Hk, TotalCap)
 
       ! This is an assumption that weekday flows are 110% of weekly average flows
       Real(dp), Parameter :: PerWkday = 1.10
@@ -725,7 +741,7 @@ implicit none
       Integer, Intent(In) :: Iper, Iwyr
       Real(dp), Intent(In) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
       Real(dp), Intent(In) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
-      Real(dp), Intent(In) :: IncMW1(14), DecMW1(14), IncMW2(14), DecMW2(14)
+      Real(dp), Intent(In) :: IncMW(BACount, 14), DecMW(BACount, 14)
       Integer, Intent(In) :: sys
       Character(80), Intent(Out) :: SolverFiles(80 * 14 * 4)
 
@@ -751,7 +767,7 @@ implicit none
       Character(8) :: ColName(MaxBndLines), BndColName(MaxBndLines)
       Character(8) :: RhsRowName(MaxRhsLines)
       Real(dp) :: RhsRowValue(MaxRhsLines), BndColValue(MaxRhsLines) 
-      Real(dp) :: IncRHSMaxMW1, DecRHSMinMW1, IncRHSMaxMW2, DecRHSMinMW2
+      Real(dp) :: IncRHSMaxMW(BACount), DecRHSMinMW(BACount)
       Character(2) :: BndColType(MaxBndLines)
       Logical :: FoundDwnstr
       Real(dp) :: Tterm
@@ -779,7 +795,7 @@ implicit none
             !  turbine flow.  Using the minumum of this and the first
             !  curve segment gives a max turbine flow restriction for the 
             !  plant and avoids infeasibility problems.
-            FullGte(j) = AMin1(Cap(j)/Hk(j), HkVsFg(j, 2)) * 1000.
+            FullGte(j) = Min(Cap(j)/Hk(j), HkVsFg(j, 2)) * 1000.
           Else 
             HkCurveSeg = 1 
             Do k = 3, 7, 2
@@ -1168,10 +1184,12 @@ implicit none
       !Print *, NRow, ' rows in study'
 
       If (UseMWReserves .EQV. .TRUE.) Then
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCN1'
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'INCF1'
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECN1'
-        Write(99, '(1X, A1, 2X, A4)') 'G', 'DECF1'
+        Do i = 1, BACount
+          Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'INCN', i
+          Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'INCF', i
+          Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'DECN', i
+          Write(99, '(1X, A1, 2X, A4, I2.2)') 'G', 'DECF', i
+        End Do
       End If
       ! Put in the objective function
       Write(99, '(1X, A1, 2X, A3)') 'N', 'OBJ'
@@ -1205,7 +1223,10 @@ implicit none
       !  Note: values not explicitly put into the matrix are assumed to 
       !  be zero by the solver.
       TotalCap = 0
-      IncRHSMaxMW1 = 0.0
+      Do i = 1, BACount
+        IncRHSMaxMW(i) = 0.0
+        DecRHSMinMW(i) = 0.0
+      End Do
       Do i = 1, PlantCount
         Write(ColName(ColNum), '(A1,I2.2,A2)') 'W', i, 'TN'
         Write(ColName(ColNum + 1), '(A1,I2.2,A2)') 'W', i, 'SN'
@@ -1591,60 +1612,34 @@ implicit none
 
           ! Now incorporate the INC and DEC MW logic
           If (UseMWReserves .EQV. .TRUE.) Then
-            Do j = 1, 5
-              If (Res1PlantNames(j) .EQ. Plnt(i)) Then
-                MpsRowName(MpsLineNum) = 'INCN1'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                MpsRowValue(MpsLineNum) = -Hk(i) 
-                MpsLineNum = MpsLineNum + 1
+            Do j = 1, BACount
+              Do k = 1, ResPlantCount(j)
+                If (ResPlantNames(j, k) .EQ. Plnt(i)) Then
+                  Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'INCN', j
+                  Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                  MpsRowValue(MpsLineNum) = -Hk(i) 
+                  MpsLineNum = MpsLineNum + 1
 
-                MpsRowName(MpsLineNum) = 'INCF1'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                MpsRowValue(MpsLineNum) = -Hk(i) 
-                MpsLineNum = MpsLineNum + 1
+                  Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'INCF', j
+                  Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                  MpsRowValue(MpsLineNum) = -Hk(i) 
+                  MpsLineNum = MpsLineNum + 1
 
-                IncRHSMaxMW1 = IncRHSMaxMW1 + Hk(i) * FullGte(i) 
+                  IncRHSMaxMW(j) = IncRHSMaxMW(j) + Hk(i) * FullGte(i) 
 
-                MpsRowName(MpsLineNum) = 'DECN1'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                MpsRowValue(MpsLineNum) = Hk(i) 
-                MpsLineNum = MpsLineNum + 1
+                  Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'DECN', j
+                  Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
+                  MpsRowValue(MpsLineNum) = Hk(i) 
+                  MpsLineNum = MpsLineNum + 1
 
-                MpsRowName(MpsLineNum) = 'DECF1'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                MpsRowValue(MpsLineNum) = Hk(i) 
-                MpsLineNum = MpsLineNum + 1
+                  Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'DECF', j
+                  Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
+                  MpsRowValue(MpsLineNum) = Hk(i) 
+                  MpsLineNum = MpsLineNum + 1
 
-                DecRHSMinMW1 = DecRHSMinMW1 + Hk(i) * QMin(i) 
-              End If 
-            End Do
-            Do j = 1, 2
-              If (Res2PlantNames(j) .EQ. Plnt(i)) Then
-                ! Add second reserve pool logic here
-                MpsRowName(MpsLineNum) = 'INCN2'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                MpsRowValue(MpsLineNum) = -Hk(i) 
-                MpsLineNum = MpsLineNum + 1
-
-                MpsRowName(MpsLineNum) = 'INCF2'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                MpsRowValue(MpsLineNum) = -Hk(i) 
-                MpsLineNum = MpsLineNum + 1
-
-                IncRHSMaxMW2 = IncRHSMaxMW2 + Hk(i) * FullGte(i) 
-
-                MpsRowName(MpsLineNum) = 'DECN2'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                MpsRowValue(MpsLineNum) = Hk(i) 
-                MpsLineNum = MpsLineNum + 1
-
-                MpsRowName(MpsLineNum) = 'DECF2'
-                Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                MpsRowValue(MpsLineNum) = Hk(i) 
-                MpsLineNum = MpsLineNum + 1
-
-                DecRHSMinMW2 = DecRHSMinMW2 + Hk(i) * QMin(i)                     
-                End If
+                  DecRHSMinMW(j) = DecRHSMinMW(j) + Hk(i) * QMin(i) 
+                End If 
+              End Do
             End Do
           End If
 
@@ -1670,37 +1665,23 @@ implicit none
       If (UseMWReserves .EQV. .TRUE.) Then
         ! These RHS are over multiple plants so handled outside the loop.  These are 
         !  for reserve constraints.
-        RhsRowName(RhsLineNum) = 'INCN1' 
-        RhsRowValue(RhsLineNum) = IncMW1(Iper) * 1000 - IncRHSMaxMW1
-        RhsLineNum = RhsLineNum + 1
+        Do i = 1, BACount
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCN', i 
+            RhsRowValue(RhsLineNum) = IncMW(i, Iper) * 1000 - IncRHSMaxMW(i)
+            RhsLineNum = RhsLineNum + 1
 
-        RhsRowName(RhsLineNum) = 'INCF1' 
-        RhsRowValue(RhsLineNum) = IncMW1(Iper) * 1000 - IncRHSMaxMW1
-        RhsLineNum = RhsLineNum + 1
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCF', i 
+            RhsRowValue(RhsLineNum) = IncMW(i, Iper) * 1000 - IncRHSMaxMW(i)
+            RhsLineNum = RhsLineNum + 1
 
-        RhsRowName(RhsLineNum) = 'DECN1' 
-        RhsRowValue(RhsLineNum) = DecMW1(Iper) * 1000 + DecRHSMinMW1
-        RhsLineNum = RhsLineNum + 1
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'DECN', i 
+            RhsRowValue(RhsLineNum) = DecMW(i, Iper) * 1000 + DecRHSMinMW(i)
+            RhsLineNum = RhsLineNum + 1
 
-        RhsRowName(RhsLineNum) = 'DECF1' 
-        RhsRowValue(RhsLineNum) = DecMW1(Iper) * 1000 + DecRHSMinMW1
-        RhsLineNum = RhsLineNum + 1
-        
-        RhsRowName(RhsLineNum) = 'INCN2' 
-        RhsRowValue(RhsLineNum) = IncMW2(Iper) * 1000 - IncRHSMaxMW2
-        RhsLineNum = RhsLineNum + 1
-
-        RhsRowName(RhsLineNum) = 'INCF2' 
-        RhsRowValue(RhsLineNum) = IncMW2(Iper) * 1000 - IncRHSMaxMW2
-        RhsLineNum = RhsLineNum + 1
-
-        RhsRowName(RhsLineNum) = 'DECN2' 
-        RhsRowValue(RhsLineNum) = DecMW2(Iper) * 1000 + DecRHSMinMW2
-        RhsLineNum = RhsLineNum + 1
-
-        RhsRowName(RhsLineNum) = 'DECF2' 
-        RhsRowValue(RhsLineNum) = DecMW2(Iper) * 1000 + DecRHSMinMW2
-        RhsLineNum = RhsLineNum + 1        
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'DECF', i 
+            RhsRowValue(RhsLineNum) = DecMW(i, Iper) * 1000 + DecRHSMinMW(i)
+            RhsLineNum = RhsLineNum + 1
+        End Do
       End If
 
       ! This puts the objective function last
@@ -1981,7 +1962,7 @@ implicit none
 
           If (AdjustSpill) Then
             PerctSpill = SpillFac * (VarValue(OnTurbPos) + VarValue(OnSpillPos))
-            TargetSpill = Amin1(PerctSpill, GasCapOn)
+            TargetSpill = Min(PerctSpill, GasCapOn)
             SpillAdd = 0
             If (TargetSpill .GT. VarValue(OnSpillPos)) Then
               SpillAdd = TargetSpill - VarValue(OnSpillPos)
@@ -1990,7 +1971,7 @@ implicit none
             VarValue(OnSpillPos) = VarValue(OnSpillPos) + SpillAdd
 
             PerctSpill = SpillFac * (VarValue(OffTurbPos) + VarValue(OffSpillPos))
-            TargetSpill = Amin1(PerctSpill, GasCapOff)
+            TargetSpill = Min(PerctSpill, GasCapOff)
             SpillAdd = 0
             If (TargetSpill .GT. VarValue(OffSpillPos)) Then
               SpillAdd = TargetSpill - VarValue(OffSpillPos)
@@ -2001,7 +1982,7 @@ implicit none
               & VarValue(OffTurbPos), VarValue(OffSpillPos)
             AdjustSpill = .FALSE.
           End If
-          
+         
           ! Now the logic for night time decremental turbine flow to support wind
           If (UseDecWind .EQV. .TRUE.) Then
             If (WindDec(i, Iper) .GT. VarValue(OffTurbPos)) Then
