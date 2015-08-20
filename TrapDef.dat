@@ -1,5 +1,5 @@
-"InputsDir","C:\Progra~1\nwcouncil.org\TRAP2\inputs\"
-"OutputsDir","C:\Progra~1\nwcouncil.org\TRAP2\outputs\"
+"InputsDir","C:\nwcouncil.org\TRAP2\inputs\"
+"OutputsDir","C:\nwcouncil.org\TRAP2\outputs\"
 "BPAReguFile","BPAREGU 2019 for TRAP.OUT"
 "FOR/MaintFile","FOR.DAT"
 "PlantParamsFile","SYSTEM 4K.DEF"

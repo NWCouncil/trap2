@@ -15,7 +15,19 @@
     {
         "Entry"
         {
-        "MsmKey" = "8:_010CEB547620490B993689160ECC38A6"
+        "MsmKey" = "8:_057CFEA291B24E03AB852D37B70EFE5D"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_1F1C29FED0084054A87F3C56F8803EE6"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_2348D84C12E94C0EA7833E4466938AF4"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -28,12 +40,6 @@
         "Entry"
         {
         "MsmKey" = "8:_7D870A13FFF54DB8A8DAF149BC572373"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_95EE0DF8A54744C6A4A25C9A92D84F77"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -57,13 +63,31 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_B9C65373381D49DD841BB84060ADCB06"
+        "MsmKey" = "8:_C556B616C410430985E07DC22A8274FD"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_CA1223A8456848F1A051524C4EF7A1D9"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_D2234F547E674DC4A36B3FE392B037E9"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_D50BCF4DA6AE4638AAD731B974B28630"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_E9836EC4DC5448C5B4CB75AF0CFAA0C7"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -159,34 +183,6 @@
     {
         "CustomAction"
         {
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_229A1B01394F457C88BF649CDB418375"
-            {
-            "Name" = "8:MSMPISetup.exe"
-            "Condition" = "8:Not Installed"
-            "Object" = "8:_010CEB547620490B993689160ECC38A6"
-            "FileType" = "3:2"
-            "InstallAction" = "3:2"
-            "Arguments" = "8:/Install"
-            "EntryPoint" = "8:"
-            "Sequence" = "3:1"
-            "Identifier" = "8:_E014CA48_0AE2_4161_8369_7F938A26FE3E"
-            "InstallerClass" = "11:FALSE"
-            "CustomActionData" = "8:"
-            }
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_CF6B314A410844DBA3811334B4613FC3"
-            {
-            "Name" = "8:vcredist_x86.exe"
-            "Condition" = "8:NOT Installed AND NOT PATCH"
-            "Object" = "8:_B9C65373381D49DD841BB84060ADCB06"
-            "FileType" = "3:2"
-            "InstallAction" = "3:1"
-            "Arguments" = "8:/Install"
-            "EntryPoint" = "8:"
-            "Sequence" = "3:1"
-            "Identifier" = "8:_58244A7B_0CFA_4952_926A_A07C2A5806BC"
-            "InstallerClass" = "11:FALSE"
-            "CustomActionData" = "8:"
-            }
         }
         "DefaultFeature"
         {
@@ -202,12 +198,52 @@
         }
         "File"
         {
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_010CEB547620490B993689160ECC38A6"
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_057CFEA291B24E03AB852D37B70EFE5D"
             {
-            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\MSMPISetup.exe"
-            "TargetName" = "8:MSMPISetup.exe"
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\vcredist_x86.exe"
+            "TargetName" = "8:vcredist_x86.exe"
             "Tag" = "8:"
-            "Folder" = "8:_C53C34C32BDC4737BD60B195F5BB55EA"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_1F1C29FED0084054A87F3C56F8803EE6"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\vcredist_x64.exe"
+            "TargetName" = "8:vcredist_x64.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_2348D84C12E94C0EA7833E4466938AF4"
+            {
+            "SourcePath" = "8:C:\\Program Files\\nwcouncil.org\\TRAP2\\outputs\\mps\\1929011.mps"
+            "TargetName" = "8:1929011.mps"
+            "Tag" = "8:"
+            "Folder" = "8:_BC59D9B69D99478C87D8C789CECAC353"
             "Condition" = "8:"
             "Transitive" = "11:FALSE"
             "Vital" = "11:TRUE"
@@ -262,26 +298,6 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_95EE0DF8A54744C6A4A25C9A92D84F77"
-            {
-            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\vcredist_x64.exe"
-            "TargetName" = "8:vcredist_x64.exe"
-            "Tag" = "8:"
-            "Folder" = "8:_C53C34C32BDC4737BD60B195F5BB55EA"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_B87226688A7248C390C11A872232BD74"
             {
             "SourcePath" = "8:..\\inputs\\SYSTEM 4K.DEF"
@@ -302,12 +318,32 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_B9C65373381D49DD841BB84060ADCB06"
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_C556B616C410430985E07DC22A8274FD"
             {
-            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\vcredist_x86.exe"
-            "TargetName" = "8:vcredist_x86.exe"
+            "SourcePath" = "8:C:\\Program Files\\nwcouncil.org\\TRAP2\\outputs\\mpiout\\trap 2019 Reserves.OUT-0000"
+            "TargetName" = "8:trap 2019 Reserves.OUT-0000"
             "Tag" = "8:"
-            "Folder" = "8:_C53C34C32BDC4737BD60B195F5BB55EA"
+            "Folder" = "8:_9AA1901C86FE48C092F3407339C1248D"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_CA1223A8456848F1A051524C4EF7A1D9"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\MSMPISetup.exe"
+            "TargetName" = "8:MSMPISetup.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
             "Condition" = "8:"
             "Transitive" = "11:FALSE"
             "Vital" = "11:TRUE"
@@ -328,6 +364,46 @@
             "TargetName" = "8:FOR.DAT"
             "Tag" = "8:"
             "Folder" = "8:_CB40AF47C60C4EF5A344D11DEAC00263"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_D50BCF4DA6AE4638AAD731B974B28630"
+            {
+            "SourcePath" = "8:..\\..\\..\\..\\Downloads\\lp_solve_5.5.2.0_exe_win32.zip"
+            "TargetName" = "8:lp_solve_5.5.2.0_exe_win32.zip"
+            "Tag" = "8:"
+            "Folder" = "8:_3DE5A46887214BA3BF79CF8BDEE5078B"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_E9836EC4DC5448C5B4CB75AF0CFAA0C7"
+            {
+            "SourcePath" = "8:C:\\Program Files\\nwcouncil.org\\TRAP2\\outputs\\lpout\\1929011.out"
+            "TargetName" = "8:1929011.out"
+            "Tag" = "8:"
+            "Folder" = "8:_88567DA318294B208B905861828227D9"
             "Condition" = "8:"
             "Transitive" = "11:FALSE"
             "Vital" = "11:TRUE"
@@ -372,7 +448,7 @@
             }
             "{3C67513D-01DD-4637-8A68-80971EB9504F}:_C53C34C32BDC4737BD60B195F5BB55EA"
             {
-            "DefaultLocation" = "8:[ProgramFilesFolder][Manufacturer]\\[ProductName]"
+            "DefaultLocation" = "8:[WindowsVolume][Manufacturer]\\[ProductName]"
             "Name" = "8:#1925"
             "AlwaysCreate" = "11:FALSE"
             "Condition" = "8:"
@@ -424,6 +500,17 @@
                             }
                         }
                     }
+                    "{9EF0B969-E518-4E46-987F-47570745A589}:_3DE5A46887214BA3BF79CF8BDEE5078B"
+                    {
+                    "Name" = "8:Dependencies"
+                    "AlwaysCreate" = "11:FALSE"
+                    "Condition" = "8:"
+                    "Transitive" = "11:FALSE"
+                    "Property" = "8:_BCFF759951C04A11A5C3ECF104CA6852"
+                        "Folders"
+                        {
+                        }
+                    }
                     "{9EF0B969-E518-4E46-987F-47570745A589}:_CB40AF47C60C4EF5A344D11DEAC00263"
                     {
                     "Name" = "8:inputs"
@@ -453,15 +540,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:TRAP2"
-        "ProductCode" = "8:{69CC35B2-1419-4841-B2ED-95D3F548F756}"
-        "PackageCode" = "8:{A8C5E70C-5D5F-42DB-ADC1-DF8E376A63ED}"
+        "ProductCode" = "8:{EACCE2B2-6065-441D-A425-C4764D22419F}"
+        "PackageCode" = "8:{F3F9BF23-349D-4B65-BF6D-6AD9CC8A84C9}"
         "UpgradeCode" = "8:{5D0E4D59-E50B-4D72-AEB5-F71046C3C1F1}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
-        "RemovePreviousVersions" = "11:FALSE"
+        "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:2.0.006"
+        "ProductVersion" = "8:2.0.010"
         "Manufacturer" = "8:nwcouncil.org"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
