@@ -1,11 +1,11 @@
 "InputsDir","C:\nwcouncil.org\TRAP2\inputs\"
 "OutputsDir","C:\nwcouncil.org\TRAP2\outputs\"
-"BPAReguFile","BPAREGU 2019 for TRAP.OUT"
+"BPAReguFile","BPAREGU 2023.OUT"
 "FOR/MaintFile","FOR.DAT"
-"PlantParamsFile","SYSTEM 4K.DEF"
-"ReserveFile","trap 2019 Reserves.OUT"
-"OutputFile","4K-4hr-BPARES.OUT"
-"NumberofPkHours",10
-"OptionStudy","Special 6K-4hr"
-"LpFile","LP.OUT"
+"PlantParamsFile","SYSTEM 4K 2023.DEF"
+"ReserveFile","trap 2023 2 Reserves.OUT"
+"OutputFile","4K-2hr-BPARES_2023.OUT"
+"NumberofPkHours",2
+"OptionStudy","Special 6K-2hr"
+"LpFile","LP 2023.OUT"
 
