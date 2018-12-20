@@ -410,6 +410,10 @@ implicit none
       Real(dp), Intent(Out) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
       Real(dp), Intent(Out) :: PeriodDraft
       Logical :: DoneContents
+      
+!JFF  Initialize variables
+        HIndIdaho = 0 
+!JFF  End            
 
       ReguFile = GetFileDef('BPAReguFile')
       ReguFile = Trim(InputsDir) // Trim(ReguFile)
@@ -470,6 +474,7 @@ implicit none
       End Do 
 
       ! Not worrying about Idaho because the regu file I have does not contain it...
+       
       If (HeaderDone .AND. Eof .LE. 0) Then
         If((.NOT.PeriodDone) .OR. (.NOT.DoneIndEast) .OR. (.NOT.DoneIndWest)) Then
           Print *, 'Trouble with header, last period was ', Iper
@@ -1785,7 +1790,7 @@ implicit none
       Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId, OtherGenFed
       Real(dp) :: OtherOnEast, OtherOffEast, OtherOnWest, OtherOffWest
       Real(dp) :: OtherOnId, OtherOffId, OtherOnFed, OtherOffFed
-      Real(dp) :: EnergyOut, PlntFac, PeakFacOther
+      Real(dp) :: EnergyOut, PlntFac, PeakFacOther     
 
       OutProfile = Mod(sys - 1, 4) + 1
 
@@ -1844,10 +1849,12 @@ implicit none
       End Do
 
       ! Setup some basic headers
+      !JFF Put in explicit formatting to eliminate wrap around in output 
       If (sys .EQ. 1) Then
         Write(50, *) 'hours in peak = '
         Write(50, '(1X, I3)') NumOn 
-        Write(50, *) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   TM_FD  FDON  FDOFF   IWY'
+        Write(50, 51) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   TM_FD  FDON  FDOFF   IWY'
+51      Format(a94)
 
         Write(LpVarsFile, '(A, I4.4)') Trim(OutputsDir) // 'LPVARS'
         Open(Unit=102, File=LpVarsFile)
@@ -1865,6 +1872,11 @@ implicit none
 
       EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
       IdOnPeakCap = 0; IdOffPeakCap = 0;
+      
+!JFF Initialize additional variables 
+      FedOnPeakCap = 0
+      FedOffPeakCap = 0
+           
       Do i = 1, PlantCount
         If (InStudy(i) .NE. 0) Then
           OnTurbPos = 0; OffTurbPos = 0; OnSpillPos = 0; OffSpillPos = 0;
@@ -2045,6 +2057,7 @@ implicit none
       !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
       !   2) The hydro projects modeled in the regulator as in the region but
       !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
+      
       
       PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
       OtherGenWest = NotModW + HIndWest
