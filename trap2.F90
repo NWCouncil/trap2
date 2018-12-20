@@ -2058,7 +2058,6 @@ implicit none
       !   2) The hydro projects modeled in the regulator as in the region but
       !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
       
-      !JFF per Pat Byrne change 1.365 to 1.1365 to get proper peak factor
       
       PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
       OtherGenWest = NotModW + HIndWest
