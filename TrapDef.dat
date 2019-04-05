@@ -1,11 +1,11 @@
-"InputsDir","C:\nwcouncil.org\TRAP2\inputs\"
-"OutputsDir","C:\nwcouncil.org\TRAP2\outputs\"
-"BPAReguFile","BPAREGU 2023.OUT"
+"InputsDir","C:\Users\fazio\Documents\Git\trap2\inputs\"
+"OutputsDir","C:\Users\fazio\Documents\Git\trap2\outputs\"
+"BPAReguFile","BPAREGU 125Flex 1st.OUT"
 "FOR/MaintFile","FOR.DAT"
-"PlantParamsFile","SYSTEM 4K 2023.DEF"
+"PlantParamsFile","SYSTEM BPA 125Flex Spill.DEF"
 "ReserveFile","trap 2023 2 Reserves.OUT"
-"OutputFile","4K-2hr-BPARES_2023.OUT"
-"NumberofPkHours",2
-"OptionStudy","Special 6K-2hr"
+"OutputFile","Sust Peak 10hr Flex.OUT"
+"NumberofPkHours",10
+"OptionStudy","2023 Ref 4K-2hr"
 "LpFile","LP 2023.OUT"
 
