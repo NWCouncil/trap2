@@ -12,7 +12,7 @@ implicit none
   Logical, Parameter :: UseMWReserves = .TRUE.
   Integer, Parameter :: PlantCount = (35 + 1)
   Integer, Parameter :: BACount = (8 + 1)
-  Integer, Parameter :: ResPlantCount(1:8) = (/5, 2, 3, 6, 2, 4, 2, 1/)  
+  Integer, Parameter :: ResPlantCount(1:8) = (/5, 2, 3, 6, 2, 4, 2, 1/)
   Character(6), Parameter :: FedPlantNames(1:14) = (/'H HORS', 'LIBBY ', 'ALBENI', &
     'COULEE', 'CH JOE', 'DWRSHK', 'LR.GRN', 'L GOOS', 'LR MON', 'ICE H ', 'MCNARY', &
     'J DAY ', 'DALLES', 'BONN  '/)
@@ -33,7 +33,7 @@ implicit none
   Real(dp) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
   Real(dp) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
   Real(dp) :: IncMW(BACount, 14), DecMW(BACount, 14)
-  Real(dp) :: Pond(PlantCount, 14) 
+  Real(dp) :: Pond(PlantCount, 14)
   Integer :: Iper, Iwyr, StartRegDataNum
   Real(dp) :: PeriodDraft
   Real(dp) :: HIndIdaho, HIndEast, HIndWest
@@ -43,7 +43,11 @@ implicit none
   Real(dp) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
   Character(80) :: SolverFiles(80 * 14 * 4)
   Real(dp) :: Hk(PlantCount), TotalCap
-  
+
+  ! JFF
+  Integer HighSpillHrs(8,2), SpillCap(8,15), TestAverage
+  Real FlatSpill(8,15), PerTOD(8,15), PSpill(8,2)
+
   call MPI_Init(ierr)  ! PHB call Init here instead of earlier
   StartProg = MPI_WTime()
 
@@ -55,21 +59,21 @@ implicit none
   ResPlantNames(5, 1:2) = (/'KERR  ', 'THOM F '/) ! Northwestern
   ResPlantNames(6, 1:4) = (/'MERWIN', 'YALE  ', 'SWFT 1', 'SWFT 2'/) ! PacifiCorp
   ResPlantNames(7, 1:2) = (/'PELTON', 'RND B '/)
-  ResPlantNames(8, 1) = 'BOUND'  
-  
+  ResPlantNames(8, 1) = 'BOUND'
+
   RawInputsDir = GetFileDef('InputsDir')
   InputsDir = Trim(RawInputsDir)
   RawOutputsDir = GetFileDef('OutputsDir')
   OutputsDir = Trim(RawOutputsDir)
-  
+
   call GetOutageDerate(OutageProb)
 
-  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
+  call GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW, HighSpillHrs, SpillCap, FlatSpill, PerTOD, PSpill, TestAverage)
 
   ! The following code takes care of the embarassingly parallel part of this problem using some
   !  basic OpenMPI functionality.  This will allow for this code to be split to up to the number
   !  of processors equal to the number of systems solved, 80 * 14 * 4 = 4480 processors as of 7/23/2014 -- Ben
-  
+
   ! call MPI_Init(ierr)  ! PHB comment out here, call Init before this
   call MPI_Comm_size(MPI_COMM_WORLD, comsize, ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
@@ -87,12 +91,13 @@ implicit none
   Print '(A, I2, A, I3.3, A)', 'Started ', comsize, ' processes, system ', rank, ' responded'
   StartRegDataNum = floor(real(StartSys - 1)/4) + 1
   OldRegDataNum = 0
-  Do sys=StartSys, EndSys 
+  Do sys=StartSys, EndSys
     RegDataNum = floor(real(sys - 1)/4) + 1
     If (RegDataNum .NE. OldRegDataNum) Then
       call  GetReguArrays(rank, Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
         & QOut, SumSpill, AvMw, StartRegDataNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
-        & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
+        & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI, &
+        & HighSpillHrs, SpillCap, PerTOD, FlatSpill, PSpill, TestAverage)
       OldRegDataNum = RegDataNum
     End If
 
@@ -105,11 +110,11 @@ implicit none
 
     call OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
       & NotModI, NotModE, NotModW, FedMw, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
-    
+
   End Do
 
 !  call MPI_Finalize(ierr)  ! PHB comment out here, call Finalize later
-  
+
   ! Need to make sure all the processes have completed before moving on
   If (rank .NE. 0) Then
     call MPI_SEND(rank, 1, MPI_INTEGER, 0, 2001, MPI_COMM_WORLD, ierr)
@@ -119,15 +124,15 @@ implicit none
       Print '(I4, A, I4.4)', rank, ': Received Completed Signal from ', DoneRank
     End Do
   End If
-  
+
   ! And make sure all files are completed before they are combined.
   call CloseFiles()
 
   If (rank .EQ. 0) Then
-    Print '(I4, A, I4.4)', rank, ': Starting File Combination.' 
+    Print '(I4, A, I4.4)', rank, ': Starting File Combination.'
     call CombineOutputFiles(rank)
   End If
-  
+
   EndProg = MPI_WTime()
   call MPI_Finalize(ierr)  ! PHB call Finalize here instead of earlier
   If (rank .EQ. 0) Then
@@ -137,7 +142,7 @@ implicit none
   contains
     function GetFileDef(FileIdString)
 
-      Integer :: i, Eof 
+      Integer :: i, Eof
       Character(*) :: FileIdString
       Character(50) :: DummyVar
       Character(132) :: DataString
@@ -166,11 +171,11 @@ implicit none
       Character(80) :: ForFile
       Integer :: i, j, Eof
       Real(dp) :: TotUnits, TotCap, CapXFor
-      Real(dp) :: Units, Capacity, For 
+      Real(dp) :: Units, Capacity, For
       Integer :: IPer
       Real(dp) :: A1, A2
       Real(dp) :: AvgFor, ForMean, ForVar, ForSD, ForLow, ForHigh
-      
+
       ! First Read statement skips the title line
       ForFile = GetFileDef('FOR/MaintFile')
       ForFile = Trim(InputsDir) // Trim(ForFile)
@@ -185,9 +190,9 @@ implicit none
         Read(20, '(1X,A6,6X,F6.0,3X,F8.2,1X,F7.2)', Iostat=Eof) TempName, Units, Capacity, For
         TotUnits = TotUnits + Units
         TotCap = TotCap + Capacity
-        ! Since the Forced Outage Rate is not stored as a decimal value, the 
+        ! Since the Forced Outage Rate is not stored as a decimal value, the
         !  following calculation results in a fairly meaningless number.  It
-        !  will be used appropriately later though adding Capacity*For/100 
+        !  will be used appropriately later though adding Capacity*For/100
         !  would be a bit more intuitive.
         CapXFor = CapXFor + Capacity*For
       End Do
@@ -200,26 +205,26 @@ implicit none
         !  and high.  The reason it is read twice is because a range of unplanned
         !  outages will be used to add a low and high FOR estimate to both the low
         !  and high maintenance.  This ends up with a Low-Low, Low-High, High-Low
-        !  and High-High column for Maintenance and FOR respectively for each of 
+        !  and High-High column for Maintenance and FOR respectively for each of
         !  the 14 periods.
         OutageProb(IPer, 1) = A1
         OutageProb(IPer, 2) = A1
         OutageProb(IPer, 3) = A2
         OutageProb(IPer, 4) = A2
       End Do
-      
+
       ! Now using some statistical theory on binary distribution derive
       !  the expected MW to be out due to forced outages
       Iper = 0
       AvgFor = CapXFor / TotCap
-      Do i=1, 14 
+      Do i=1, 14
         Do j=1, 3, 2
-          ! Note: the mean of a binom(n, p) distribution is 
+          ! Note: the mean of a binom(n, p) distribution is
           !  np and variance is np(1-p).  Since the OutageProb array
           !  only has maintenance, the number of "available" MW for
           !  a potential outages is TotalMW * (1 - Mainteance) and the
           !  probability of an outage is the Avgerage Forced Outage rate.
-          ! Side Note: Does this treat each MW as an independent item?  Also, 
+          ! Side Note: Does this treat each MW as an independent item?  Also,
           !  theory could be a bit more messy when p is a parameter
           !  with a distribution.  Either way modelling the units and using
           !  them to estimate outages rather than each MW seems like it would
@@ -229,7 +234,7 @@ implicit none
           ForVar = ForMean * (1 - AvgFor / 100)
           ForSd = Sqrt(ForVar)
           ! Now jumping to the normal approximation for the binomial
-          !  distribution to create a 90% confidence interval for 
+          !  distribution to create a 90% confidence interval for
           !  the forced outage rate
           ForLow = ForMean - 1.675 * ForSd
           ForHigh = ForMean + 1.675 * ForSd
@@ -241,7 +246,7 @@ implicit none
       End Do
     end subroutine
 
-    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW)
+    subroutine GetPlantArrays(Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, HkVsFg, Pond, QMinIn, WindDec, IncMW, DecMW, HighSpillHrs, SpillCap, FlatSpill, PerTOD, PSpill, TestAverage)
       Integer :: i, j, Eof
       Character(80) :: SystemFile
       Integer :: NPlant
@@ -249,18 +254,24 @@ implicit none
       Character(6), Intent(Out) :: Plnt(0:PlantCount), Dwnstr(PlantCount)  ! PHB override default lower bound of Plnt()
       Integer, Intent(Out) :: InStudy(PlantCount)
       Real(dp), Intent(Out) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
-      Real(dp) :: OldPond 
+      Real(dp) :: OldPond
       Character(6) :: TempName
       Real(dp), Intent(Out) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
-      Real(dp), Intent(Out) :: Pond(PlantCount, 14) 
+      Real(dp), Intent(Out) :: Pond(PlantCount, 14)
       Real(dp), Intent(Out) :: QMinIn(PlantCount, 14), WindDec(PlantCount, 14)
       Real(dp), Intent(Out) :: IncMW(BACount, 14), DecMW(BACount, 14)
       Logical :: PlantOrderCorrect
 
+      !JFF 1-4-2019
+      Integer HighSpillHrs(8,2), TestAverage
+      Real FlatSpill(8,15), PerTOD(8,15), temp, PSpill(8,2)
+      Integer SpillCap(8,15)
+      Integer itemp
+
       SystemFile = GetFileDef('PlantParamsFile')
       SystemFile = Trim(InputsDir) // Trim(SystemFile)
       Eof = 0
-      Open(unit=30, File=SystemFile, Iostat=Eof)    
+      Open(unit=30, File=SystemFile, Iostat=Eof)
       ! Read the system data (SYSTEM.DEF) starting with
       !  the plant name, the downstream plant name, whether the plant is in
       !  this study (be careful with this), the time delay between plants,
@@ -269,7 +280,7 @@ implicit none
       ! Read past the title rows, this skips two lines
       Read(30, '(/)')
       NPlant = 0   ! PHB -- some compilers object to array index
-!                  ! at LT 1 unless override default lower bound 
+!                  ! at LT 1 unless override default lower bound
 
       Do While (Eof .GE. 0 .AND. Plnt(NPlant) .NE. '      ')
         NPlant = NPlant + 1
@@ -350,7 +361,7 @@ implicit none
           WindDec(i, j) = WindDec(i, j) * 1000
         End Do
       End Do
-      PlantOrderCorrect = .TRUE. 
+      PlantOrderCorrect = .TRUE.
       Do i = 1, PlantCount - 1
         Do j = i + 1, PlantCount
           If (Plnt(i) .EQ. Dwnstr(j)) Then
@@ -370,15 +381,84 @@ implicit none
       Do i = 1, 14
         Read(30, '(1X,3X,8(2X,F7.0))', Iostat=Eof) DecMW(1, i), DecMW(2, i), DecMW(3, i), DecMW(4, i), &
             & DecMW(5, i), DecMW(6, i), DecMW(7, i), DecMW(8, i)
-      End Do    
+      End Do
       If (PlantOrderCorrect .EQV. .FALSE.) Then
         Stop
       End If
+
+      ! Read Spill Data (JFF 1-4-2019)
+      !   HighSpillHrs = Number of off-peak hours at high spill
+      !   Hrs = 24 means flat spill (from BPAREGU) all hours
+      !   Hrs < 24 means spill at cap values for these hours
+
+      !   HighSpillHrs(8,2) - HighspillHrs(i,1) = plant number, HighspillHrs(i,2) = hours @high spill (Integer)
+      !   PerTOD(8,15) - Percent of period with TOD spill, PerTOD(i,15) = plant number (Real)
+      !   SpillCap(8,15) - SpillCap(i,15) = plant number, SpillCap(i,1-14) = period spill caps (Integer)
+      !   FlatSpill(8,15) - FlatSpill(i,15) = plant number, FlatSpill(i,14) = flat spill for non-TOD portion of period (Real)
+      !                                                                       (can be in cfs or in percent of outflow)
+      !   PSpill(8,2) - PSpill(i,1) = plant number, PSpill(i,2) = performance spill (during peak hours) (Real)
+
+      !   For now input format is fixed with B line before A line for each plant
+      !   All 4 lower Snake and 4 lower Columbia dams must be included
+      !   and the order of the plants must be the same for the HighSpillHrs and SpillCap arrays
+
+      Read(30, '(//)')
+      Do i=1,8
+          Read(30, '(4x,i4,8x,i2,14f4.2)') HighSpillHrs(i,1), HighSpillHrs(i,2), (PerTOD(i,j),j=1,14)
+          PerTOD(i,15) = HighSpillHrs(i,1)
+      Enddo
+
+      Read(30, '(//)')
+      Do i=1,8
+          Read(30, '(4x,i4,7x,7i7)') SpillCap(i,15), (SpillCap(i,j), j=11,14), (SpillCap(i,j), j=1,3)
+          Read(30, '(4x,i4,7x,7i7)') itemp, (SpillCap(i,j), j=4,10)
+
+          if (itemp .ne. SpillCap(i,15)) then
+              print *, ' Plant numbers do not match'
+              print *, SpillCap(i,15), itemp
+              stop
+          endif
+      Enddo
+
+      Read(30, '(//)')
+      Do i=1,8
+          Read(30, '(4x,f4.0,7x,7f9.2)') FlatSpill(i,15), (FlatSpill(i,j), j=11,14), (FlatSpill(i,j), j=1,3)
+          Read(30, '(4x,f4.0,7x,7f9.2)') temp, (FlatSpill(i,j), j=4,10)
+
+          if (temp .ne. FlatSpill(i,15)) then
+              print *, ' Plant numbers do not match'
+              print *, FlatSpill(i,15), temp
+              stop
+          endif
+      Enddo
+
+!     Read Performance Level Spill (during 8 peak-load hours) PSpill(i,1) = Plant No.
+
+      Read(30, '(//)')
+      Do i=1,8
+          Read(30, '(4x,f4.0,7x,f9.2)') PSpill(i,1), PSpill(i,2)
+      Enddo
+
+      Read(30, '(//)')
+      Read(30, '(7x,I1)') TestAverage
+
+!     Make sure all spill data arrays have same plant order
+
+      do i=1,8
+          itemp = Abs(HighSpillHrs(i,1)-SpillCap(i,15)) + Abs(SpillCap(i,15)-Int(FlatSpill(i,15))) + Abs(Int(FlatSpill(i,15))-Int(PSpill(i,1)))
+          if (itemp .ne. 0) then
+            Write(99,*) ' Spill data arrays in input file are not in order'
+            Write(99,*) i, HighSpillHrs(i,1), SpillCap(i,15), FlatSpill(i,15), PSpill(i,1)
+            Stop
+          endif
+      enddo
+
     end subroutine
 
     subroutine  GetReguArrays(rank, Plnt, InStudy, QMinIn, Iper, Iwyr, QMin, SMinOn, SMinOff, &
       & QOut, SumSpill, AvMw, StartRegDataNum, HIndIdaho, HIndEast, HIndWest, PeriodDraft, &
-      & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI)
+      & HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw, FedMw, ModW, ModE, ModI, &
+      & HighSpillHrs, SpillCap, PerTOD, FlatSpill, PSpill, TestAverage)
 
       Character(6), Parameter :: NotModWestNames(16) = (/'CUSH 1', 'CUSH 2', 'ALDER ', &
         'LAGRND', 'ROSS  ', 'DIABLO', 'GORGE ', 'U BAKR', 'L BAKR', 'TMTHY ', 'OK GRV', &
@@ -388,7 +468,7 @@ implicit none
       Integer, Intent(In) :: rank
       Character(6), Intent(In) :: Plnt(0:PlantCount)  ! PHB Plnt array match size
       Integer, Intent(In) :: InStudy(PlantCount)
-      Real(dp), Intent(In) :: QMinIn(PlantCount)
+      Real(dp), Intent(In) :: QMinIn(PlantCount,14)
       Integer, Intent(InOut) :: StartRegDataNum
       Integer :: i, j, Eof = 0, SysCount
       Character(80) :: ReguFile, InfeasOutFile, SpecialOutFile
@@ -396,7 +476,7 @@ implicit none
       Logical :: HeaderDone, PeriodDone, DoneIndIdaho, DoneIndEast, DoneIndWest
       Integer, Intent(Out) :: Iper, Iwyr
       Real(dp), Intent(Out) :: HIndIdaho, HIndEast, HIndWest
-      Character(6) :: TempName 
+      Character(6) :: TempName
       Character(1) :: IAstrk
       Real(dp) :: NatQ, TQOut, TJunk, Bypas, Force, TOther, OverG, TAvMw, Fac
       Real(dp), Intent(Out) :: HNotInPnw, TotMw, NotModW, NotModE, NotModI, StudyMw
@@ -410,10 +490,15 @@ implicit none
       Real(dp), Intent(Out) :: QOut(PlantCount), SumSpill(PlantCount), AvMw(PlantCount)
       Real(dp), Intent(Out) :: PeriodDraft
       Logical :: DoneContents
-      
+
 !JFF  Initialize variables
-        HIndIdaho = 0 
-!JFF  End            
+        Integer PltNo, H, L, HighSpillHrs(8,2), SpillCap(8,15), PltIndex, NumOn, Smonth, TestAverage
+        Real PerTOD(8,15), FlatSpill(8,15), PSpill(8,2)
+        Real    Sc, Sp, Sm, Per, Flat, Q, S8, S16
+        Character(80) :: NumOnDef
+
+        HIndIdaho = 0
+!JFF  End
 
       ReguFile = GetFileDef('BPAReguFile')
       ReguFile = Trim(InputsDir) // Trim(ReguFile)
@@ -421,7 +506,7 @@ implicit none
 
       If (Eof .LT. 0) Then
         Print *, 'File completely read'
-        Return        
+        Return
       End If
 
       !Read and ignore the file until it gets to the right starting point
@@ -448,7 +533,7 @@ implicit none
       DoneIndEast = .FALSE.
       DoneIndWest = .FALSE.
       ! Use for troubleshooting
-      Do While (.NOT. HeaderDone .AND. Eof .GE. 0) 
+      Do While (.NOT. HeaderDone .AND. Eof .GE. 0)
         Read(40, '(1X, 100A)', Iostat=Eof) Line
         If (Line(2:6) .EQ. 'PLANT') Then
           HeaderDone = .TRUE.
@@ -471,10 +556,10 @@ implicit none
           DoneIndWest = .TRUE.
           Read(Line, '(65X, F7.0)') HIndWest
         End If
-      End Do 
+      End Do
 
       ! Not worrying about Idaho because the regu file I have does not contain it...
-       
+
       If (HeaderDone .AND. Eof .LE. 0) Then
         If((.NOT.PeriodDone) .OR. (.NOT.DoneIndEast) .OR. (.NOT.DoneIndWest)) Then
           Print *, 'Trouble with header, last period was ', Iper
@@ -484,7 +569,7 @@ implicit none
       End If
 
       !Print *, SysCount, Iper, Iwyr
-        
+
       TempName = ''
       Eof = 0
       HNotInPnw = 0
@@ -492,10 +577,10 @@ implicit none
       NotModE = 0; NotModW = 0; NotModI = 0;
       NumFound = 0
       TotMw = 0
-      SpecialOutFile = GetFileDef('OptionStudy') 
+      SpecialOutFile = GetFileDef('OptionStudy')
 #if defined (__GFORTRAN__)
-      Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout/' // Trim(SpecialOutFile) // '-', rank 
-      Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout/INFEAS.OUT-', rank 
+      Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout/' // Trim(SpecialOutFile) // '-', rank
+      Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout/INFEAS.OUT-', rank
 #elif defined (__INTEL_COMPILER)
       Write(SpecialOutFile, '(A,I4.4)') OutputsDir // 'mpiout\' // Trim(SpecialOutFile) // '-', rank  ! PHB my system uses \ backslash
       Write(InfeasOutFile, '(A,I4.4)') Trim(OutputsDir) // 'mpiout\INFEAS.OUT-', rank     ! PHB my system uses \ backslash
@@ -512,11 +597,26 @@ implicit none
         Read(40, '(A75)') Line
         Read(Line, '(1X,A6,A1,5X,F7.0,6F7.0,8X,F5.0)', Iostat=Eof) TempName, IAstrk, &
           NatQ, TQOut, TJunk, Force, Bypas, TOther, OverG, TAvMw
-        
+
+! JFF 1-10-2019  Get plant number
+
+        PltNo = 0
+        If (TempName .eq. 'LR.GRN') PltNo = 520
+        If (TempName .eq. 'L GOOS') PltNo = 518
+        If (TempName .eq. 'LR MON') PltNo = 504
+        If (TempName .eq. 'ICE H ') PltNo = 502
+        If (TempName .eq. 'MCNARY') PltNo = 488
+        If (TempName .eq. 'J DAY ') PltNo = 440
+        If (TempName .eq. 'DALLES') PltNo = 365
+        If (TempName .eq. 'BONN  ') PltNo = 320
+
+! JFF    End
+
+
         If (IAstrk .EQ. '*') Then
           HNotInPnw = HNotInPnw + TAvMw
         End If
-        
+
         ! Per Mike:
         !  THE BPA REGULATOR ON RARE OCCASIONS CAN HAVE THE TOTAL OF
         !   SPILLS GREATER THAN THE RELEASES.  UNTIL THIS IS CORRECTED
@@ -533,7 +633,7 @@ implicit none
           Force = Fac * Force
           TOther = Fac * TOther
           OverG = Fac * OverG
-        End If 
+        End If
         TotMw = TotMw + TAvMw
         ! Keep track of MW from plants that are not modelled in trap
         Do i=1, Size(NotModWestNames)
@@ -569,14 +669,14 @@ implicit none
             StudyMw = StudyMw + TAvMw
             NumFound = NumFound + 1
             ! Use Minimum Flows from HOSS
-            QMin(i) = QMinIn(i)
+            QMin(i) = QMinIn(i, Iper)
             ! Setup Default Spill, this will be altered later for BiOp Spill
             SMinOn(i) = Bypas + TOther
             SMinOff(i) = Bypas + TOther
             ! BiOp spill varies with: period (8 - 14), on or off peak, and water year
             !  This is plant specific and overrides general numbers in the regulator
             !  This code handles plants that have absolute minimum requirements: LR.GRN,LR MON,BONN
-            !  The others are handled below! 
+            !  The others are handled below!
 
               ! PHB  With the current reg, period 1 is indexed to October (originally was September)
               !
@@ -589,90 +689,211 @@ implicit none
               ! 7 = Ap1      14 = Sep
               !
               ! PHB  Adjust all hard-coded references to Iper to correct index
-            
+
+! JFF 1-10-2019: The following code is replaced by new code that implements time of day spill
+!                as per the 2019 Spill Agreement
+
+
             ! Code for BiOp spill at Lower Granite
 !            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
-            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
+!            If (TempName .EQ. 'LR.GRN' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
               ! Spill at 20000 April and May, then 18000 until second half of August
-              GasCap = 20000
+!              GasCap = 20000
 !              If (Iper .GT. 10) Then
-              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
-                GasCap = 18000
-              End If
-              FormatString = '(1X,I2,1X,I4,A25,3F7.0)' 
-              If (TQOut .LT. GasCap - 100.) Then
-                Write(70, FormatString) Iper, Iwyr, 'LR.GRN TQOut < Gas Cap', TQOut, GasCap
-              End If
-              ! Use GasCap - 100 for min and GasCap + 100 for max to allow for the LP to Solve
-              SMinOff(i) = Min(GasCap - 100., TQOut)
-              SMinOn(i) = SMinOff(i)
-              ! If total flow is under 65000 in May then no spill requirement
-!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
-              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
-                SMinOff(i) = 0.
-                SMinOn(i) = 0.
-              End If
-            End If
+!              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
+!                GasCap = 18000
+!              End If
+!              FormatString = '(1X,I2,1X,I4,A25,3F7.0)'
+!              If (TQOut .LT. GasCap - 100.) Then
+!                Write(70, FormatString) Iper, Iwyr, 'LR.GRN TQOut < Gas Cap', TQOut, GasCap
+!              End If
+!              ! Use GasCap - 100 for min and GasCap + 100 for max to allow for the LP to Solve
+!              SMinOff(i) = Min(GasCap - 100., TQOut)
+!              SMinOn(i) = SMinOff(i)
+!              ! If total flow is under 65000 in May then no spill requirement
+!!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+!              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
+!                SMinOff(i) = 0.
+!                SMinOn(i) = 0.
+!              End If
+!            End If
 
             ! Code for BiOp spill at Lo Mo
 !            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then
-            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
+!            If (TempName .EQ. 'LR MON' .AND. Iper .GE. 7 .AND. Iper .LE. 12) Then  ! PHB change to 7 and 12 (from 8 and 13)
               ! Spill at 30000 in April and May, then 17000 until the second half of August
-              
-              GasCap = 30000
-!              If (Iper .GT. 10) Then
-              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
-                GasCap = 17000
-              End If
-              If (TQOut .LT. GasCap - 100.) Then
-                Write(70, FormatString) Iper, Iwyr, 'LR MON TQout < Gas Cap', TQOut, GasCap
-              End If
-              SMinOff(i) = Min(GasCap - 100., TQOut)
-              SMinOn(i) = SMinOff(i)
-              ! If total flow is under 65000 in May then no spill requirement
-!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
-              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
-                SMinOff(i) = 0.
-                SMinOn(i) = 0.
-              End If
-            End If
-          
-            ! Code for BiOp spill at Bonneville
-!            If (TempName .EQ. 'BONN' .AND. Iper .GE. 9 .AND. Iper .LE. 14) Then
-            If (TempName .EQ. 'BONN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then  ! PHB change to 8 and 13 (from 9 and 14)
-              GasCap = 113000
-              ! Unlike other plants Bonnevilles desired spill is under the gas cap
-              DesiredSpillOn = 100000
-              DesiredSpillOff = 100000
-!              If (Iper .GT. 10) Then
-              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
-                DesiredSpillOff = GasCap
-              End If
-!              If (Iper .EQ. 11) Then
-              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11)
-                DesiredSpillOn = 92500
-!              Else If (Iper .EQ. 12) Then
-              Else If (Iper .EQ. 11) Then  ! PHB change to 11 (from 12)
-!                DesiredSpillOn = 82500
-                DesiredSpillOn = 85000     ! PHB change to 85000 from 82500?
-!              Else If (Iper .GE. 13) Then
-              Else If (Iper .GE. 12) Then  ! PHB change to 12 (from 13)
-!                DesiredSpillOn = 72500
-                DesiredSpillOn = 75000     ! PHB change to 75000 from 72500?
-              End If 
 
-              If (TQOut .LT. DesiredSpillOn) Then
-                Write(70, FormatString) Iper, Iwyr, 'BONN TQout < Desired On', &
-                  TQOut, DesiredSpillOn 
-                DesiredSpillOn = TQOut - 100
-              End If
-              SMinOn(i) = DesiredSpillOn
-              If (TQOut .LT. DesiredSpillOff) Then
-                Write(70, FormatString) Iper, Iwyr, 'BONN TQout < Desired Off', &
-                  TQOut, DesiredSpillOff 
-                DesiredSpillOff = TQOut - 100
-              End If
-            End If
+!              GasCap = 30000
+!!              If (Iper .GT. 10) Then
+!              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
+!                GasCap = 17000
+!              End If
+!              If (TQOut .LT. GasCap - 100.) Then
+!                Write(70, FormatString) Iper, Iwyr, 'LR MON TQout < Gas Cap', TQOut, GasCap
+!              End If
+!              SMinOff(i) = Min(GasCap - 100., TQOut)
+!              SMinOn(i) = SMinOff(i)
+!              ! If total flow is under 65000 in May then no spill requirement
+!!              If (Iper .EQ. 10 .AND. TQOut .LT. 65000) Then
+!              If (Iper .EQ. 9 .AND. TQOut .LT. 65000) Then  ! PHB change to 9 (from 10)
+!                SMinOff(i) = 0.
+!                SMinOn(i) = 0.
+!              End If
+!            End If
+!
+!            ! Code for BiOp spill at Bonneville
+!!            If (TempName .EQ. 'BONN' .AND. Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (TempName .EQ. 'BONN' .AND. Iper .GE. 8 .AND. Iper .LE. 13) Then  ! PHB change to 8 and 13 (from 9 and 14)
+!              GasCap = 113000
+!              ! Unlike other plants Bonnevilles desired spill is under the gas cap
+!              DesiredSpillOn = 100000
+!              DesiredSpillOff = 100000
+!!              If (Iper .GT. 10) Then
+!              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10)
+!                DesiredSpillOff = GasCap
+!              End If
+!!              If (Iper .EQ. 11) Then
+!              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11)
+!                DesiredSpillOn = 92500
+!!              Else If (Iper .EQ. 12) Then
+!              Else If (Iper .EQ. 11) Then  ! PHB change to 11 (from 12)
+!!                DesiredSpillOn = 82500
+!                DesiredSpillOn = 85000     ! PHB change to 85000 from 82500?
+!!              Else If (Iper .GE. 13) Then
+!              Else If (Iper .GE. 12) Then  ! PHB change to 12 (from 13)
+!!                DesiredSpillOn = 72500
+!                DesiredSpillOn = 75000     ! PHB change to 75000 from 72500?
+!              End If
+!
+!
+!              If (TQOut .LT. DesiredSpillOn) Then
+!                Write(70, FormatString) Iper, Iwyr, 'BONN TQout < Desired On', &
+!                  TQOut, DesiredSpillOn
+!                DesiredSpillOn = TQOut - 100
+!              End If
+!              SMinOn(i) = DesiredSpillOn
+!              If (TQOut .LT. DesiredSpillOff) Then
+!                Write(70, FormatString) Iper, Iwyr, 'BONN TQout < Desired Off', &
+!                  TQOut, DesiredSpillOff
+!                DesiredSpillOff = TQOut - 100
+!              End If
+!            End If
+!
+! JFF 1-10-2019  End of Commented out code
+!                Replacement code for bypass spill logic is below
+
+       If (PltNo .ne. 0 .and. Bypas .ne. 0) then
+         PltIndex = 0
+         Do j=1,8
+           if(PltNo .eq. SpillCap(j,15)) PltIndex = j
+         Enddo
+         If (PltIndex .eq. 0) then
+           print *, ' Could not find plant'
+           print *, PltNo
+           stop
+         Endif
+
+       GasCap = SpillCap(PltIndex, Iper)
+
+! Set up variables for spill equations
+
+         Sc  = GasCap				                      	! Spill Cap
+         Sp  = PSpill(PltIndex,2)                           ! Performance Spill
+         Q = TQOut                                          ! Total outflow
+         If (Sp .lt. 1.0) Sp = Sp * Q                       ! If performance spill is percent of flow
+         Sm = Bypas + TOther  				                ! Monthly average spill from BPAREGU
+         NumOnDef = Trim(GetFileDef('NumberofPkHours'))
+         Read(NumOnDef, '(I2)') NumOn
+         H = NumOn					                        ! Number of on peak hours in TRAP
+         L = HighSpillHrs(PltIndex,2)                   	! Number of off-peak high spill hours
+
+! Right now order of plants in HighSpillHrs and SpillCap must be the same
+
+         If (L .eq. 24) then        ! For monthly flat spill
+           SMinOn(i)  = Sm
+           SMinOff(i) = Sm
+
+         Else                       ! For new spill agreement spill
+
+         ! Adjust spill cap and performance spill for periods with part TOD and part flat spill
+
+           If (PerTOD(PltIndex,Iper) .gt. 0 .and. PerTOD(PltIndex,Iper) .lt. 1.0) then
+              Per = PerTOD(PltIndex,Iper)
+              If (FlatSpill(PltIndex,Iper) .lt. 1.0) then
+                Flat = Q * FlatSpill(PltIndex,Iper)
+              Else
+                Flat = FlatSpill(PltIndex,Iper)
+              Endif
+              Sc = Per*Sc + (1-Per)*Flat
+              Sp = Per*Sp + (1-Per)*Flat
+           Endif
+
+!          First calculate the desired 8-hour on-peak spill (S8) and 16-hour off-peak spill S(16)
+!          taking into account the above adjustment for partial month time of day spill
+!          Next calculate the TRAP peak period spill and TRAP off peak period spill by prorating the S8 and S16 spills above
+
+           S8  = min(Q - QminIn(i,Iper), Sp)
+           S16 = min(Q - QminIn(i,Iper), Sc)
+
+!          Test to see if calculated monthly average matches REGUDIF monthly average
+!            If mismatch exists, will not stop program but will write out mismatches
+!            To turn this on, set Test to 1 in the input file
+
+           if (TestAverage .eq. 1) then
+             Smonth = ((24-L)*S8 + L*S16)/24
+             if (Smonth .ne. Sm) then
+               write(97,*) ' Calculated monthly average spill does not equal BPAREGU monthly spill'
+               write(97,*) Iper, SpillCap(PltIndex,15), Sm, Smonth
+             endif
+           endif
+
+!          Now calculate TRAP on and off peak spill levels
+
+           If (H .gt. (24 - L)) then    ! When TRAP peak period is > 24-L
+             SMinOn(i)  = ((24-L)*S8 + (H-(24-L))*S16)/H
+             SMinOff(i) = S16
+
+           Else                         ! When TRAP peak period <= 24-L
+             SMinOn(i)  = S8
+             SMinOff(i) = (((24-L)-H)*S8 + L*S16)/(24-H)
+           Endif
+
+       Endif
+
+!      Check for negative values - could mean input data is not consistent
+
+         If (SMinOn(i) .lt. 0) then
+             If (SMinOn(i) .gt. -0.1) then
+                 SMinOn(i) = 0.0
+             Else
+                 write(99,*) ' On Peak Spill is negative'
+                 write(99,*) ' Plant, Period, SpillCap, Adjusted Cap, Son, Soff, Smonth'
+                 write(99,*) TempName, Iper, SpillCap(PltIndex,Iper), Sc, SMinOn(i), SMinOff(i), Sm
+                 stop
+             Endif
+         Endif
+         If (SMinOff(i) .lt. 0) then
+             If (SMinOff(i) .gt. -0.1) then
+                 SMinOff(i) = 0.0
+             Else
+                 write(99,*) ' Off Peak Spill is negative'
+                 write(99,*) ' Plant, Period, SpillCap, Adjusted Cap, Son, Soff, Smonth'
+                 write(99,*) TempName, Iper, SpillCap(PltIndex,Iper), Sc, SMinOn(i), SMinOff(i), Sm
+                 stop
+             Endif
+         Endif
+
+       Endif
+
+! JFF 1-10-2019 End of new Bypass Spill Logic
+
+! JFF Temp code to write bypass spill levels for testing
+
+       If (PltNo .ne. 0 .and. Bypas .ne. 0) then
+         write(93, *) NumOn, L, TempName, SpillCap(PltIndex,Iper), Iper, SMinOn(i), SMinOff(i)
+       Endif
+
+! JFF End test
 
             QOut(i) = TQOut
             SumSpill(i) = Bypas + Force + OverG + TOther
@@ -712,7 +933,7 @@ implicit none
       ! Use for troubleshooting
       !Close(40)
 
-    end subroutine 
+    end subroutine
 
     subroutine BuildSolverMatrix(rank, OutageProb, Plnt, Dwnstr, InStudy, Delay, Ramp, Cap, &
       HkVsFg, Pond, Iper, Iwyr, QMin, SMinOn, SMinOff, QOut, SumSpill, AvMw, IncMW, DecMW, &
@@ -722,14 +943,14 @@ implicit none
       Real(dp), Parameter :: PerWkday = 1.10
       ! Max spill bound, probably not needed but in the old trap...
       Real(dp), Parameter :: SpillMax = 10.**6
-      ! This is the maximum number of rows that can be added to the system of 
-      !  equations 
+      ! This is the maximum number of rows that can be added to the system of
+      !  equations
       Integer, Parameter :: MaxProbRows = 12
-      ! Max MPS Lines is number of plants times the number of potential rows for 
-      !  the linear system times the number of columns and doubled for the 
+      ! Max MPS Lines is number of plants times the number of potential rows for
+      !  the linear system times the number of columns and doubled for the
       !  objective function
       Integer, Parameter :: MaxMpsLines = PlantCount * MaxProbRows * 7 * 2 * 2
-      ! Max Bound Lines is 2 bounds per column 
+      ! Max Bound Lines is 2 bounds per column
       Integer, Parameter :: MaxBndLines = PlantCount * 7 * 2 * 2
       ! Max RHS is max number of potential equations
       Integer, Parameter :: MaxRhsLines = PlantCount * MaxProbRows * 2
@@ -741,7 +962,7 @@ implicit none
       Character(6), Intent(In) :: Plnt(0:PlantCount), Dwnstr(PlantCount)  ! PHB Plnt array match size
       Integer, Intent(In) :: InStudy(PlantCount)
       Real(dp), Intent(In) :: Delay(PlantCount), Ramp(PlantCount), Cap(PlantCount)
-      Real(dp), Intent(In) :: Pond(PlantCount, 14) 
+      Real(dp), Intent(In) :: Pond(PlantCount, 14)
       Real(dp), Intent(In) :: HkVsFg(PlantCount, 9)  ! PHB resize from 8 to 9
       Integer, Intent(In) :: Iper, Iwyr
       Real(dp), Intent(In) :: QMin(PlantCount), SMinOn(PlantCount), SMinOff(PlantCount)
@@ -771,7 +992,7 @@ implicit none
       Integer :: MpsLineNum, ColNum, RhsLineNum, BndLineNum
       Character(8) :: ColName(MaxBndLines), BndColName(MaxBndLines)
       Character(8) :: RhsRowName(MaxRhsLines)
-      Real(dp) :: RhsRowValue(MaxRhsLines), BndColValue(MaxRhsLines) 
+      Real(dp) :: RhsRowValue(MaxRhsLines), BndColValue(MaxRhsLines)
       Real(dp) :: IncRHSMaxMW(BACount), DecRHSMinMW(BACount)
       Character(2) :: BndColType(MaxBndLines)
       Logical :: FoundDwnstr
@@ -782,9 +1003,9 @@ implicit none
       OutFac = 1 - OutageProb(Iper, OutProfile)
       Do j = 1, PlantCount
         Hk(j) = 0.
-        ! If the outflow is greater than spill then something is going 
+        ! If the outflow is greater than spill then something is going
         !  through a turbine.  If there is MW associated then just take
-        !  the HK implied by the BPA regulator.  I.e. Average MW 
+        !  the HK implied by the BPA regulator.  I.e. Average MW
         !  divided by the turbine flow
         If (QOut(j) - SumSpill(j) .GT. 0 .AND. AvMw(j) .GT. 0.) Then
           Hk(j) = AvMw(j) / (QOut(j) - SumSpill(j)) * 1000.
@@ -796,13 +1017,13 @@ implicit none
         Else
           If (HkVsFg(j, 1) .EQ. 0 .OR. Hk(j) .GE. HkVsFg(j, 1)) Then
             ! Note HK * Flow = MW implies MW / HK = Flow, if you substitue
-            !  plant capacity then this could be interpreted as maximum 
+            !  plant capacity then this could be interpreted as maximum
             !  turbine flow.  Using the minumum of this and the first
-            !  curve segment gives a max turbine flow restriction for the 
+            !  curve segment gives a max turbine flow restriction for the
             !  plant and avoids infeasibility problems.
             FullGte(j) = Min(Cap(j)/Hk(j), HkVsFg(j, 2)) * 1000.
-          Else 
-            HkCurveSeg = 1 
+          Else
+            HkCurveSeg = 1
             Do k = 3, 7, 2
               ! If there is a HK curve for the plant figure out the Full Gate
               !  for the current HK by where it falls on the HK curve
@@ -812,12 +1033,12 @@ implicit none
                 End If
               End If
             End Do
-            ! If you hit the last segment then use the Full Gate from that 
+            ! If you hit the last segment then use the Full Gate from that
             !  segment
-            
-! PHB Note -- in the following IF construct, HkCurveSeg + 2 is 9 when HkCurveSeg is 7, 
+
+! PHB Note -- in the following IF construct, HkCurveSeg + 2 is 9 when HkCurveSeg is 7,
 ! and would need to resize array (in this sub and in main)
-            
+
             If (HkCurveSeg .EQ. 7 .OR. HkVsFg(j, HkCurveSeg + 2) .EQ. 0) Then
               FullGte(j) = HkVsFg(j, HkCurveSeg + 1) * 1000
             Else
@@ -879,7 +1100,7 @@ implicit none
       End If
 
       ! Here is where I diverge in strategy from the original trap. Rather
-      !  than use a library to solve the problem, I am going to create an 
+      !  than use a library to solve the problem, I am going to create an
       !  MPS file that can be read into a command line solver.  This allows
       !  some flexibility if we choose to use different solvers in the
       !  future -- Ben
@@ -892,8 +1113,8 @@ implicit none
 #endif
       Open(Unit=99, File=SolverFiles(sys), Status='Unknown')
 
-      Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper 
-      Write(99, '(A4)') 'ROWS' 
+      Write(99, '(A4, 10X, I4.4, A1, I2.2)') 'NAME', Iwyr, '-', Iper
+      Write(99, '(A4)') 'ROWS'
       ! Calculate the number of rows in the study
       NRow = 0
       NPlantInStudy = 0
@@ -942,7 +1163,7 @@ implicit none
             Write(RowName(i, 7), '(A1,I2.2,A3)') 'P', i, 'WD4'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 7), RowName(i, 7)
             NRow = NRow + 7
-          Else 
+          Else
             Print *, 'Problem with pond for plant ', Plnt(i)
             Stop
           End If
@@ -952,12 +1173,12 @@ implicit none
             RowType(i, 8) = 'G'
             Write(RowName(i, 8), '(A1,I2.2,A2)') 'P', i, 'QN'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 8), RowName(i, 8)
-            ! Make sure off-peak flows exceed Q Min 
+            ! Make sure off-peak flows exceed Q Min
             RowType(i, 9) = 'G'
             Write(RowName(i, 9), '(A1,I2.2,A2)') 'P', i, 'QF'
             Write(99, '(1X, A1, 2X, A8)') RowType(i, 9), RowName(i, 9)
             NRow = NRow + 2
-          End If 
+          End If
           If (Ramp(i) .GE. 0) Then
             ! Make sure ramp constraints are met
             RowType(i, 10) = 'L'
@@ -973,165 +1194,165 @@ implicit none
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 1)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A2)') 'SP', i, 'WB'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
             Else
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WBN'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 1)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WBN'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WBN'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WBN'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A3,I2.2,A3)') 'SP2', i, 'WBN'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 1)
               Write(MpsColName(MpsLineNum), '(A3,I2.2,A3)') 'SP2', i, 'WBN'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A3,I2.2,A3)') 'SP2', i, 'WBN'
               MpsRowValue(MpsLineNum) = 1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A3,I2.2,A3)') 'SP2', i, 'WBN'
-              BndColType(BndLineNum) = 'UP' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'UP'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
-              
+
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WBF'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 2)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WBF'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WBF'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WBF'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A3,I2.2,A3)') 'SP2', i, 'WBF'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 2)
               Write(MpsColName(MpsLineNum), '(A3,I2.2,A3)') 'SP2', i, 'WBF'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A3,I2.2,A3)') 'SP2', i, 'WBF'
               MpsRowValue(MpsLineNum) = 1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A3,I2.2,A3)') 'SP2', i, 'WBF'
-              BndColType(BndLineNum) = 'UP' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'UP'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'DWE'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 3)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'DWE'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'DWE'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'DWE'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A3,I2.2,A3)') 'SP2', i, 'DWE'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 3)
               Write(MpsColName(MpsLineNum), '(A3,I2.2,A3)') 'SP2', i, 'DWE'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A3,I2.2,A3)') 'SP2', i, 'DWE'
               MpsRowValue(MpsLineNum) = 1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A3,I2.2,A3)') 'SP2', i, 'DWE'
-              BndColType(BndLineNum) = 'UP' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'UP'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD1'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 4)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD1'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD1'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD1'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD2'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 5)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD2'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD2'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD2'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD3'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 6)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD3'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD3'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD3'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 7)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A3)') 'SP', i, 'WD4'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
             End If
             If (QMin(i) .GE. 0) Then
@@ -1139,30 +1360,30 @@ implicit none
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 8)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'QN'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'QN'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A2)') 'SP', i, 'QN'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
 
               Write(ColName(ColNum), '(A2,I2.2,A2)') 'SP', i, 'QF'
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 9)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'QF'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'QF'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A2)') 'SP', i, 'QF'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
             End If
             If (Ramp(i) .GE. 0) Then
@@ -1170,20 +1391,20 @@ implicit none
               ColNum = ColNum + 1
               MpsRowName(MpsLineNum) = RowName(i, 10)
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'RP'
-              MpsRowValue(MpsLineNum) = 1 
+              MpsRowValue(MpsLineNum) = 1
               MpsLineNum = MpsLineNum + 1
               MpsRowName(MpsLineNum) = 'OBJ'
               Write(MpsColName(MpsLineNum), '(A2,I2.2,A2)') 'SP', i, 'RP'
               MpsRowValue(MpsLineNum) = -1000
               MpsLineNum = MpsLineNum + 1
               Write(BndColName(BndLineNum), '(A2,I2.2,A2)') 'SP', i, 'RP'
-              BndColType(BndLineNum) = 'LO' 
-              BndColValue(BndLineNum) = 0 
+              BndColType(BndLineNum) = 'LO'
+              BndColValue(BndLineNum) = 0
               BndLineNum = BndLineNum + 1
             End If
           End If
         End If
-        
+
         NumRows(i) = NRow
       End Do
       !Print *, NRow, ' rows in study'
@@ -1215,18 +1436,18 @@ implicit none
         Print *, 'Program does not handle on-peak = ', NumOn
         Stop
       End If
-      ! Note: Ramps are assumed to be 4 Hours long in the morning and the 
+      ! Note: Ramps are assumed to be 4 Hours long in the morning and the
       !  evening for a total of 8 ramping hours
       NumShdr = 8
-      NumOff = 24 - NumOn - NumShdr 
+      NumOff = 24 - NumOn - NumShdr
 
       ! Start with the most upstream plant and loop through to put in the
-      !  appropriate constraints.  Note I'm storing more values in arrays 
+      !  appropriate constraints.  Note I'm storing more values in arrays
       !  to enable the rows of the problem to be built row-by-row rather
       !  than by column.  This is simply for readability of this code.
-      !  There is quite a bit of avoidable repetition in this code, but 
+      !  There is quite a bit of avoidable repetition in this code, but
       !  it is hopefully more readable as a result.
-      !  Note: values not explicitly put into the matrix are assumed to 
+      !  Note: values not explicitly put into the matrix are assumed to
       !  be zero by the solver.
       TotalCap = 0
       Do i = 1, BACount - 1
@@ -1254,7 +1475,7 @@ implicit none
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
             MpsRowValue(MpsLineNum) = (NumOn + NumShdr * .5)
             MpsLineNum = MpsLineNum + 1
-            
+
             MpsRowName(MpsLineNum) = RowName(i, 1)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
             MpsRowValue(MpsLineNum) = NumOff + NumShdr * .5
@@ -1268,15 +1489,15 @@ implicit none
             RhsRowName(RhsLineNum) = RowName(i, 1)
             RhsRowValue(RhsLineNum) = 24 * QLpFlow(i)
             RhsLineNum = RhsLineNum + 1
-          Else 
+          Else
             ! Add storage columns when needed
             Write(ColName(ColNum), '(A1,I2.2,A2)') 'W', i, 'S0'
             Write(ColName(ColNum + 1), '(A1,I2.2,A2)') 'W', i, 'S1'
             Write(ColName(ColNum + 2), '(A1,I2.2,A2)') 'W', i, 'S2'
             ColNum = ColNum + 3
             ! These equations now have to take into account the pondage
-            !  constraints, here is the water balance equation for 
-            !  on peak. 
+            !  constraints, here is the water balance equation for
+            !  on peak.
             MpsRowName(MpsLineNum) = RowName(i, 1)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
             MpsRowValue(MpsLineNum) = (NumOn + NumShdr * .5)
@@ -1286,7 +1507,7 @@ implicit none
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
             MpsRowValue(MpsLineNum) = (NumOn + NumShdr * .5)
             MpsLineNum = MpsLineNum + 1
-            
+
             MpsRowName(MpsLineNum) = RowName(i, 1)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
             MpsRowValue(MpsLineNum) = NumShdr * .5
@@ -1294,7 +1515,7 @@ implicit none
 
             MpsRowName(MpsLineNum) = RowName(i, 1)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-            MpsRowValue(MpsLineNum) = NumShdr * .5 
+            MpsRowValue(MpsLineNum) = NumShdr * .5
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 1)
@@ -1319,7 +1540,7 @@ implicit none
 
             MpsRowName(MpsLineNum) = RowName(i, 2)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-            MpsRowValue(MpsLineNum) = NumOff 
+            MpsRowValue(MpsLineNum) = NumOff
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 2)
@@ -1351,7 +1572,7 @@ implicit none
             RhsRowValue(RhsLineNum) = 48. * (QMin(i) - QLpFlow(i))
             RhsLineNum = RhsLineNum + 1
 
-            ! And weekday drafting logic -- The assumption is that you can use up to 
+            ! And weekday drafting logic -- The assumption is that you can use up to
             !  half the pond to shift water between heavy and light
             MpsRowName(MpsLineNum) = RowName(i, 4)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
@@ -1369,7 +1590,7 @@ implicit none
 
             MpsRowName(MpsLineNum) = RowName(i, 5)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-            MpsRowValue(MpsLineNum) = -1 
+            MpsRowValue(MpsLineNum) = -1
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 5)
@@ -1397,7 +1618,7 @@ implicit none
 
             MpsRowName(MpsLineNum) = RowName(i, 7)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-            MpsRowValue(MpsLineNum) = -1 
+            MpsRowValue(MpsLineNum) = -1
             MpsLineNum = MpsLineNum + 1
 
             MpsRowName(MpsLineNum) = RowName(i, 7)
@@ -1411,20 +1632,20 @@ implicit none
 
             ! And put bounds on the storage
             Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'S0'
-            BndColType(BndLineNum) = 'UP' 
+            BndColType(BndLineNum) = 'UP'
             BndColValue(BndLineNum) = Pond(i, Iper)
             BndLineNum = BndLineNum + 1
 
             Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'S1'
-            BndColType(BndLineNum) = 'UP' 
+            BndColType(BndLineNum) = 'UP'
             BndColValue(BndLineNum) = Pond(i, Iper)
             BndLineNum = BndLineNum + 1
 
             Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'S2'
-            BndColType(BndLineNum) = 'UP' 
+            BndColType(BndLineNum) = 'UP'
             BndColValue(BndLineNum) = Pond(i, Iper)
             BndLineNum = BndLineNum + 1
-          End If 
+          End If
 
           ! Now add the terms for downstream plants
           If (Delay(i) .LT. 9.) Then
@@ -1453,7 +1674,7 @@ implicit none
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
                     MpsRowValue(MpsLineNum) = Tterm - (NumOn + NumShdr * .5)
                     MpsLineNum = MpsLineNum + 1
-                    
+
                     MpsRowName(MpsLineNum) = RowName(j, 1)
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
                     MpsRowValue(MpsLineNum) = Tterm - (NumOn + NumShdr * .5)
@@ -1472,9 +1693,9 @@ implicit none
                     ! Put the coefficients in the off-peak equation for downstream plants
                     MpsRowName(MpsLineNum) = RowName(j, 2)
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                    MpsRowValue(MpsLineNum) = -Tterm 
+                    MpsRowValue(MpsLineNum) = -Tterm
                     MpsLineNum = MpsLineNum + 1
-                    
+
                     MpsRowName(MpsLineNum) = RowName(j, 2)
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
                     MpsRowValue(MpsLineNum) = -Tterm
@@ -1487,7 +1708,7 @@ implicit none
 
                     MpsRowName(MpsLineNum) = RowName(j, 2)
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-                    MpsRowValue(MpsLineNum) = Tterm - NumOff 
+                    MpsRowValue(MpsLineNum) = Tterm - NumOff
                     MpsLineNum = MpsLineNum + 1
 
                     ! Put the coefficients in for weekday draft and weekend refill constraint
@@ -1495,7 +1716,7 @@ implicit none
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
                     MpsRowValue(MpsLineNum) = 168. - 5*(NumOn + NumShdr * .5)
                     MpsLineNum = MpsLineNum + 1
-                    
+
                     MpsRowName(MpsLineNum) = RowName(j, 3)
                     Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
                     MpsRowValue(MpsLineNum) = 168. - 5*(NumOn + NumShdr * .5)
@@ -1526,7 +1747,7 @@ implicit none
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
             MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
-            
+
             MpsRowName(MpsLineNum) = RowName(i, 8)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
             MpsRowValue(MpsLineNum) = 1
@@ -1557,7 +1778,7 @@ implicit none
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
             MpsRowValue(MpsLineNum) = 1
             MpsLineNum = MpsLineNum + 1
-            
+
             MpsRowName(MpsLineNum) = RowName(i, 10)
             Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
             MpsRowValue(MpsLineNum) = 1
@@ -1580,39 +1801,39 @@ implicit none
 
           ! Put bounds on the spill and turbine flows
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-          BndColType(BndLineNum) = 'UP' 
+          BndColType(BndLineNum) = 'UP'
           BndColValue(BndLineNum) = 1. * FullGte(i)
           BndLineNum = BndLineNum + 1
 
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-          BndColType(BndLineNum) = 'LO' 
+          BndColType(BndLineNum) = 'LO'
           BndColValue(BndLineNum) = 0
           BndLineNum = BndLineNum + 1
 
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-          BndColType(BndLineNum) = 'UP' 
+          BndColType(BndLineNum) = 'UP'
           BndColValue(BndLineNum) = SpillMax
           BndLineNum = BndLineNum + 1
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
-          BndColType(BndLineNum) = 'LO' 
+          BndColType(BndLineNum) = 'LO'
           BndColValue(BndLineNum) = SMinOn(i)
           BndLineNum = BndLineNum + 1
 
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-          BndColType(BndLineNum) = 'UP' 
+          BndColType(BndLineNum) = 'UP'
           BndColValue(BndLineNum) = 1. * FullGte(i)
           BndLineNum = BndLineNum + 1
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-          BndColType(BndLineNum) = 'LO' 
+          BndColType(BndLineNum) = 'LO'
           BndColValue(BndLineNum) = 0
           BndLineNum = BndLineNum + 1
 
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-          BndColType(BndLineNum) = 'UP' 
+          BndColType(BndLineNum) = 'UP'
           BndColValue(BndLineNum) = SpillMax
           BndLineNum = BndLineNum + 1
           Write(BndColName(BndLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
-          BndColType(BndLineNum) = 'LO' 
+          BndColType(BndLineNum) = 'LO'
           BndColValue(BndLineNum) = SMinOff(i)
           BndLineNum = BndLineNum + 1
 
@@ -1623,28 +1844,28 @@ implicit none
                 If (ResPlantNames(j, k) .EQ. Plnt(i)) Then
                   Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'INCN', j
                   Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                  MpsRowValue(MpsLineNum) = -Hk(i) 
+                  MpsRowValue(MpsLineNum) = -Hk(i)
                   MpsLineNum = MpsLineNum + 1
 
                   Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'INCF', j
                   Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                  MpsRowValue(MpsLineNum) = -Hk(i) 
+                  MpsRowValue(MpsLineNum) = -Hk(i)
                   MpsLineNum = MpsLineNum + 1
 
-                  IncRHSMaxMW(j) = IncRHSMaxMW(j) + Hk(i) * FullGte(i) 
+                  IncRHSMaxMW(j) = IncRHSMaxMW(j) + Hk(i) * FullGte(i)
 
                   Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'DECN', j
                   Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TN'
-                  MpsRowValue(MpsLineNum) = Hk(i) 
+                  MpsRowValue(MpsLineNum) = Hk(i)
                   MpsLineNum = MpsLineNum + 1
 
                   Write(MpsRowName(MpsLineNum), '(A4, I2.2)') 'DECF', j
                   Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'TF'
-                  MpsRowValue(MpsLineNum) = Hk(i) 
+                  MpsRowValue(MpsLineNum) = Hk(i)
                   MpsLineNum = MpsLineNum + 1
 
-                  DecRHSMinMW(j) = DecRHSMinMW(j) + Hk(i) * QMin(i) 
-                End If 
+                  DecRHSMinMW(j) = DecRHSMinMW(j) + Hk(i) * QMin(i)
+                End If
               End Do
             End Do
           End If
@@ -1655,36 +1876,36 @@ implicit none
           MpsRowValue(MpsLineNum) = Hk(i)
           MpsLineNum = MpsLineNum + 1
 
-          MpsRowName(MpsLineNum) = 'OBJ' 
+          MpsRowName(MpsLineNum) = 'OBJ'
           Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SN'
           MpsRowValue(MpsLineNum) = -10
           MpsLineNum = MpsLineNum + 1
 
-          MpsRowName(MpsLineNum) = 'OBJ' 
+          MpsRowName(MpsLineNum) = 'OBJ'
           Write(MpsColName(MpsLineNum), '(A1,I2.2,A2)') 'W', i, 'SF'
           MpsRowValue(MpsLineNum) = -10
           MpsLineNum = MpsLineNum + 1
-          
+
         End If
       End Do
 
       If (UseMWReserves .EQV. .TRUE.) Then
-        ! These RHS are over multiple plants so handled outside the loop.  These are 
+        ! These RHS are over multiple plants so handled outside the loop.  These are
         !  for reserve constraints.
-        Do i = 1, BACount - 1 
-            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCN', i 
+        Do i = 1, BACount - 1
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCN', i
             RhsRowValue(RhsLineNum) = IncMW(i, Iper) * 1000 - IncRHSMaxMW(i)
             RhsLineNum = RhsLineNum + 1
 
-            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCF', i 
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'INCF', i
             RhsRowValue(RhsLineNum) = IncMW(i, Iper) * 1000 - IncRHSMaxMW(i)
             RhsLineNum = RhsLineNum + 1
 
-            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'DECN', i 
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'DECN', i
             RhsRowValue(RhsLineNum) = DecMW(i, Iper) * 1000 + DecRHSMinMW(i)
             RhsLineNum = RhsLineNum + 1
 
-            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'DECF', i 
+            Write(RhsRowName(RhsLineNum), '(A4,I2.2)') 'DECF', i
             RhsRowValue(RhsLineNum) = DecMW(i, Iper) * 1000 + DecRHSMinMW(i)
             RhsLineNum = RhsLineNum + 1
         End Do
@@ -1693,14 +1914,14 @@ implicit none
       ! This puts the objective function last
       ColName(ColNum) = 'OBJ'
       ColNum = ColNum + 1
-      
+
       If (ColNum > MaxBndLines .OR. MpsLineNum > MaxMpsLines .OR. RhsLineNum > MaxRhsLines .OR. BndLineNum > MaxBndLines) Then
         Print *, 'Possible Array Overflow: ', ColNum, MpsLineNum, RhsLineNum, BndLineNum
         Stop
       End If
 
       ! Lots of unneeded looping here because I couldn't find native array sort
-      !  functions in Fortran.  Likely this can be improved it there are 
+      !  functions in Fortran.  Likely this can be improved it there are
       !  problems with program response time. -- Ben
       Do i = 1, ColNum
         Do j = 1, MpsLineNum - 1
@@ -1710,7 +1931,7 @@ implicit none
         End Do
       End Do
 
-      ! Now setup the RHS 
+      ! Now setup the RHS
       Write(99, '(A3)') 'RHS'
       Do i = 1, RhsLineNum - 1
         Write(99, '(4X, A3, 7X, A8, 2X, F11.0)') 'RHS', RhsRowName(i), RhsRowValue(i)
@@ -1723,7 +1944,7 @@ implicit none
       Close(99)
     end subroutine
     subroutine RunSolver(rank, Iper, Iwyr, sys, SolverFiles)
-    
+
 #if defined (__INTEL_COMPILER)
       USE IFPORT  ! PHB for system calls with my compiler
 #endif
@@ -1745,16 +1966,16 @@ implicit none
 #error "No compiler indicated!"
 #endif
 
-! PHB  System calls are different with my compiler, try this instead:  
+! PHB  System calls are different with my compiler, try this instead:
 
 #if defined (__INTEL_COMPILER)
       resul = SYSTEMQQ('lp_solve -max -mps '//SolverFiles(sys)//'>'//SolveOutFile)
 #elif defined (__GFORTRAN__)
       call System("{ echo """ // SolverFiles(sys) // """; lp_solve -max -mps " // SolverFiles(sys) // "; } >" // SolveOutFile)
-#else 
+#else
 #error "No compiler indicated!"
 #endif
-      
+
     end subroutine
     subroutine OutputResults(rank, sys, Plnt, InStudy, Iper, Iwyr, WindDec, HIndIdaho, HIndEast, HIndWest, &
       & NotModI, NotModE, NotModW, FedMw, ModI, ModE, ModW, Hk, PeriodDraft, TotalCap)
@@ -1768,7 +1989,7 @@ implicit none
       Real(dp), Intent(In) :: HIndIdaho, HIndEast, HIndWest
       Real(dp), Intent(In) :: NotModE, NotModW, NotModI, FedMw, ModE, ModW, ModI
       Real(dp), Intent(In) :: Hk(PlantCount), PeriodDraft, TotalCap
-      
+
       Integer :: OutProfile
       Character(80) :: NumOnDef
       Integer :: NumOn, Eof, VarNum, i, j, NumOff, NumShdr
@@ -1790,7 +2011,7 @@ implicit none
       Real(dp) :: OtherGenEast, OtherGenWest, OtherGenId, OtherGenFed
       Real(dp) :: OtherOnEast, OtherOffEast, OtherOnWest, OtherOffWest
       Real(dp) :: OtherOnId, OtherOffId, OtherOnFed, OtherOffFed
-      Real(dp) :: EnergyOut, PlntFac, PeakFacOther     
+      Real(dp) :: EnergyOut, PlntFac, PeakFacOther
 
       OutProfile = Mod(sys - 1, 4) + 1
 
@@ -1819,7 +2040,7 @@ implicit none
       NumOnDef = Trim(GetFileDef('NumberofPkHours'))
       Read(NumOnDef, '(I2)') NumOn
       NumShdr = 8
-      NumOff = 24 - NumOn - NumShdr 
+      NumOff = 24 - NumOn - NumShdr
 
       ! Read the solver output
 #if defined (__GFORTRAN__)
@@ -1834,7 +2055,7 @@ implicit none
       VarNum = 1
       VarHeaderDone = .FALSE.
       Do While (Eof .GE. 0)
-        Read(100, '(A100)', Iostat=Eof) Line 
+        Read(100, '(A100)', Iostat=Eof) Line
         If (Line(1:5) .EQ. 'Value') Then
           Read(Line, '(29X, ES11.5)') ObjValue
         End If
@@ -1849,10 +2070,10 @@ implicit none
       End Do
 
       ! Setup some basic headers
-      !JFF Put in explicit formatting to eliminate wrap around in output 
+      !JFF Put in explicit formatting to eliminate wrap around in output
       If (sys .EQ. 1) Then
         Write(50, *) 'hours in peak = '
-        Write(50, '(1X, I3)') NumOn 
+        Write(50, '(1X, I3)') NumOn
         Write(50, 51) 'PER   TM_E    EON   EOFF   TM_W    WON   WOFF   TM_I   IDON  IDOFF   TM_FD  FDON  FDOFF   IWY'
 51      Format(a94)
 
@@ -1865,18 +2086,18 @@ implicit none
 
       Inquire(iolength=RecLen) VarValue(1:(VarNum-1))
       LpFile = GetFileDef('LpFile')
-      Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank   
+      Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank
       !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
       Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
       Write(101, Rec=sys) VarValue(1:(VarNum-1))
 
       EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
       IdOnPeakCap = 0; IdOffPeakCap = 0;
-      
-!JFF Initialize additional variables 
+
+!JFF Initialize additional variables
       FedOnPeakCap = 0
       FedOffPeakCap = 0
-           
+
       Do i = 1, PlantCount
         If (InStudy(i) .NE. 0) Then
           OnTurbPos = 0; OffTurbPos = 0; OnSpillPos = 0; OffSpillPos = 0;
@@ -1893,116 +2114,125 @@ implicit none
               Exit
             End If
           End Do
-          GasCapOn = 0; GasCapOff = 0; SpillFac = 0;
-          FlowForm = '(A20, 2X, A6, 2I5, 4F8.0)'
-          Write(70, FlowForm) "BEFOR BiOp FLOW CHECK", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), VarValue(OnSpillPos), &
-            & VarValue(OffTurbPos), VarValue(OffSpillPos)
 
-          ! PHB similar adjustments to Iper references should be done here to 
-          ! line up with Oct = period 1
-          
-          ! Code for BiOp spill at Little Goose - Spill at 30% of flow Apr through first half of Aug up to gas cap 
-          !  unless if flow is less than 65000 in May then no spill requirement in that month
-          If(Plnt(i) .EQ. "L GOOS") Then
-!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
-            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13 )
-              GasCapOn = 30000
-              GasCapOff = 30000
-              SpillFac = .3
-              TotFlow = VarValue(OnTurbPos) + VarValue(OffTurbPos) + VarValue(OnSpillPos) + VarValue(OffSpillPos)
-!              If (Iper .NE. 10 .OR. TotFlow * .5 .GT. 65000)
-              If (Iper .NE. 9 .OR. TotFlow * .5 .GT. 65000) Then  ! PHB change to 9 (from 10)
-                AdjustSpill = .TRUE.
-              End If
-            End If
-          End If
-          
-          ! Code for BiOp spill at Ice Harbor - Spill at 30% of flow Apr through first half of Aug up to gas cap
-          If (Plnt(i) .EQ. "ICE H ") Then
-!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
-            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13)
-              GasCapOff = 64000
-              GasCapOn = 45000
-              SpillFac = .3
-              AdjustSpill = .TRUE.
-            End If
-          End If
+!JFF 1-17-2019    Spill logic in main TRAP takes care of percent spill
+!                 and adjusts the spill cap for partial TOD spill and for insufficient inflows
+!                 Can comment out this section
 
-          ! Code for BiOp spill at McNary - Spill at 40% Apr through May up to gas cap, then 50% Jun through Aug up to gas cap
-          If (Plnt(i) .EQ. "MCNARY") Then
-!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
-              GasCapOn = 161000
-              GasCapOff = 161000
-              SpillFac = .4
-!              If (Iper .GT. 10) Then
-              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10 )
-                SpillFac = .5
-              End If
-              AdjustSpill = .TRUE.
-            End If
-          End If
+!          GasCapOn = 0; GasCapOff = 0; SpillFac = 0;
+!          FlowForm = '(A20, 2X, A6, 2I5, 4F8.0)'
+!          Write(70, FlowForm) "BEFOR BiOp FLOW CHECK", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), VarValue(OnSpillPos), &
+!            & VarValue(OffTurbPos), VarValue(OffSpillPos)
 
-          ! Code for BiOp spill at John Day - spill at 35% Apr through May up to gas cap, 32.5% Jun up to gas cap, 30% Jul through
-          !  Aug up to gas cap
-          If (Plnt(i) .EQ. "J DAY ") Then
-!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
-              GasCapOn = 131000
-              GasCapOff = 131000
-              SpillFac = .35
-!              If (Iper .EQ. 11) Then
-              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11 )
-                SpillFac = .325
-!              Else If (Iper .GT. 11) Then
-              Else If (Iper .GT. 10) Then  ! PHB change to 10 (from 11 )
-                SpillFac = .3
-              End If
-              AdjustSpill = .TRUE.
-            End If
-          End If
 
-          ! Code for BiOp spill at The Dalles - spill at 40% of flow Apr through Aug up to Gas Cap
-          If (Plnt(i) .EQ. "DALLES") Then
-!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
-            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
-              GasCapOn = 115000
-              GasCapOff = 115000
-              SpillFac = .4
-              AdjustSpill = .TRUE.
-            End If
-          End If
+!          ! PHB similar adjustments to Iper references should be done here to
+!          ! line up with Oct = period 1
+!
+!          ! Code for BiOp spill at Little Goose - Spill at 30% of flow Apr through first half of Aug up to gas cap
+!         !  unless if flow is less than 65000 in May then no spill requirement in that month
+!         If(Plnt(i) .EQ. "L GOOS") Then
+!!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13 )
+!              GasCapOn = 30000
+!              GasCapOff = 30000
+!              SpillFac = .3
+!              TotFlow = VarValue(OnTurbPos) + VarValue(OffTurbPos) + VarValue(OnSpillPos) + VarValue(OffSpillPos)
+!!              If (Iper .NE. 10 .OR. TotFlow * .5 .GT. 65000)
+!              If (Iper .NE. 9 .OR. TotFlow * .5 .GT. 65000) Then  ! PHB change to 9 (from 10)
+!                AdjustSpill = .TRUE.
+!              End If
+!            End If
+!          End If
 
-          If (AdjustSpill) Then
-            PerctSpill = SpillFac * (VarValue(OnTurbPos) + VarValue(OnSpillPos))
-            TargetSpill = Min(PerctSpill, GasCapOn)
-            SpillAdd = 0
-            If (TargetSpill .GT. VarValue(OnSpillPos)) Then
-              SpillAdd = TargetSpill - VarValue(OnSpillPos)
-            End If
-            VarValue(OnTurbPos) = VarValue(OnTurbPos) - SpillAdd
-            VarValue(OnSpillPos) = VarValue(OnSpillPos) + SpillAdd
+!          ! Code for BiOp spill at Ice Harbor - Spill at 30% of flow Apr through first half of Aug up to gas cap
+!          If (Plnt(i) .EQ. "ICE H ") Then
+!!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then
+!            If (Iper .GE. 7 .AND. Iper .LE. 12) Then    ! PHB change to 7 and 12 (from 8 and 13)
+!              GasCapOff = 64000
+!              GasCapOn = 45000
+!              SpillFac = .3
+!              AdjustSpill = .TRUE.
+!            End If
+!          End If
 
-            PerctSpill = SpillFac * (VarValue(OffTurbPos) + VarValue(OffSpillPos))
-            TargetSpill = Min(PerctSpill, GasCapOff)
-            SpillAdd = 0
-            If (TargetSpill .GT. VarValue(OffSpillPos)) Then
-              SpillAdd = TargetSpill - VarValue(OffSpillPos)
-            End If
-            VarValue(OffTurbPos) = VarValue(OffTurbPos) - SpillAdd
-            VarValue(OffSpillPos) = VarValue(OffSpillPos) + SpillAdd
-            Write(70, FlowForm) "AFTER BiOp FLOW CHECK", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), VarValue(OnSpillPos), &
-              & VarValue(OffTurbPos), VarValue(OffSpillPos)
-            AdjustSpill = .FALSE.
-          End If
-         
+!          ! Code for BiOp spill at McNary - Spill at 40% Apr through May up to gas cap, then 50% Jun through Aug up to gas cap
+!          If (Plnt(i) .EQ. "MCNARY") Then
+
+!          !            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
+!              GasCapOn = 161000
+!              GasCapOff = 161000
+!              SpillFac = .4
+!!              If (Iper .GT. 10) Then
+!              If (Iper .GT. 9) Then  ! PHB change to 9 (from 10 )
+!                SpillFac = .5
+!              End If
+!              AdjustSpill = .TRUE.
+!            End If
+!          End If
+
+!          ! Code for BiOp spill at John Day - spill at 35% Apr through May up to gas cap, 32.5% Jun up to gas cap, 30% Jul through
+!          !  Aug up to gas cap
+!          If (Plnt(i) .EQ. "J DAY ") Then
+!!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
+!              GasCapOn = 131000
+!              GasCapOff = 131000
+!              SpillFac = .35
+!!              If (Iper .EQ. 11) Then
+!              If (Iper .EQ. 10) Then  ! PHB change to 10 (from 11 )
+!                SpillFac = .325
+!!              Else If (Iper .GT. 11) Then
+!              Else If (Iper .GT. 10) Then  ! PHB change to 10 (from 11 )
+!                SpillFac = .3
+!              End If
+!              AdjustSpill = .TRUE.
+!            End If
+!          End If
+
+!          ! Code for BiOp spill at The Dalles - spill at 40% of flow Apr through Aug up to Gas Cap
+!          If (Plnt(i) .EQ. "DALLES") Then
+!!            If (Iper .GE. 9 .AND. Iper .LE. 14) Then
+!            If (Iper .GE. 8 .AND. Iper .LE. 13) Then    ! PHB change to 8 and 13 (from 9 and 14)
+!              GasCapOn = 115000
+!              GasCapOff = 115000
+!              SpillFac = .4
+!              AdjustSpill = .TRUE.
+!            End If
+!          End If
+
+!          If (AdjustSpill) Then
+!            PerctSpill = SpillFac * (VarValue(OnTurbPos) + VarValue(OnSpillPos))
+!            TargetSpill = Min(PerctSpill, GasCapOn)
+!            SpillAdd = 0
+!            If (TargetSpill .GT. VarValue(OnSpillPos)) Then
+!              SpillAdd = TargetSpill - VarValue(OnSpillPos)
+!            End If
+!            VarValue(OnTurbPos) = VarValue(OnTurbPos) - SpillAdd
+!            VarValue(OnSpillPos) = VarValue(OnSpillPos) + SpillAdd
+!
+!            PerctSpill = SpillFac * (VarValue(OffTurbPos) + VarValue(OffSpillPos))
+!            TargetSpill = Min(PerctSpill, GasCapOff)
+!            SpillAdd = 0
+!            If (TargetSpill .GT. VarValue(OffSpillPos)) Then
+!              SpillAdd = TargetSpill - VarValue(OffSpillPos)
+!            End If
+!            VarValue(OffTurbPos) = VarValue(OffTurbPos) - SpillAdd
+!            VarValue(OffSpillPos) = VarValue(OffSpillPos) + SpillAdd
+!            Write(70, FlowForm) "AFTER BiOp FLOW CHECK", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), VarValue(OnSpillPos), &
+!              & VarValue(OffTurbPos), VarValue(OffSpillPos)
+!            AdjustSpill = .FALSE.
+!          End If
+
+! JFF 1-17-2019 End of commented out portion of old code
+
           ! Now the logic for night time decremental turbine flow to support wind
           If (UseDecWind .EQV. .TRUE.) Then
             If (WindDec(i, Iper) .GT. VarValue(OffTurbPos)) Then
               Write(70, FlowForm) "DEC CAUSED CHANGE", Plnt(i), Iwyr, Iper, VarValue(OnTurbPos), WindDec(i, Iper), &
                 & VarValue(OffTurbPos)
               Diff = WindDec(i, Iper) - VarValue(OffTurbPos)
-              VarValue(OnTurbPos) = VarValue(OnTurbPos) - Diff 
+              VarValue(OnTurbPos) = VarValue(OnTurbPos) - Diff
               VarValue(OffTurbPos) = VarValue(OffTurbPos) + Diff
             End If
           End If
@@ -2013,7 +2243,7 @@ implicit none
           Else
             PlntFac = 1
           End If
-          
+
           OnGenTemp = VarValue(OnTurbPos) * Hk(i) * PlntFac
           OffGenTemp = VarValue(OffTurbPos) * Hk(i) * PlntFac
           ! Calculate flat output for plants that have lags greater than 8
@@ -2025,10 +2255,10 @@ implicit none
           If (Mod(sys, 4) .EQ. 1) Then
             Write(90, '(1X,I2,1X,I4,1X,A6," ON_P ",F6.0," OF_P ",F5.0)') Iper, Iwyr, Plnt(i), OnGenTemp/1000, OffGenTemp/1000
           End If
-  
+
           Do j=1, Size(FedPlantNames)
             If (FedPlantNames(j) .EQ. Plnt(i)) Then
-              FedOnPeakCap = FedOnPeakCap + OnGenTemp 
+              FedOnPeakCap = FedOnPeakCap + OnGenTemp
               FedOffPeakCap = FedOffPeakCap + OffGenTemp
             End If
           End Do
@@ -2057,9 +2287,10 @@ implicit none
       !   1) The hydro independents (not in the regulator) are given in a line at the top of each month.
       !   2) The hydro projects modeled in the regulator as in the region but
       !      not included in the trapezoidal rule approximation directly are accumulated as "_NOTMOD_"
-      
-      
-      PeakFacOther = 1.365 - Float(NumOn - 2) * .00625
+      ! PHB - Change PeakFac from 1.365 to 1.1365 to get the correct load factor
+
+
+      PeakFacOther = 1.1365 - Float(NumOn - 2) * .00625
       OtherGenWest = NotModW + HIndWest
       OtherGenEast = NotModE + HIndEast
       OtherGenId = NotModI + HIndIdaho
@@ -2072,7 +2303,7 @@ implicit none
       OtherOffId = (OtherGenId * 24 - OtherOnId * 14)/10
       OtherOnFed = OtherGenFed * PeakFacOther
       OtherOffFed = (OtherGenFed * 24 - OtherOnFed * 14)/10
-      EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho 
+      EnergyOut = StudyMw + NotModW + NotModE + NotModI + HIndWest + HIndEast + HIndIdaho
 
       Write(50, '(1X,I3,12F7.0,2X,I4)') Iper, ModE + NotModE + HIndEast, &
         & OtherOnEast + EastOnPeakCap/1000., &
@@ -2086,7 +2317,7 @@ implicit none
         & FedMw + OtherGenFed, &
         & FedOnPeakCap/1000. + OtherOnFed, &
         & FedOffPeakCap/1000. + OtherOffFed, &
-        & Iwyr  
+        & Iwyr
 
       Write(60, '(1X,I3,2F7.0)') Iper, PeriodDraft, TotalCap/1000.
 
@@ -2111,18 +2342,18 @@ implicit none
 #if defined (__INTEL_COMPILER)
       USE IFPORT   ! PHB for system calls with my compiler
 #endif
-    
+
       Integer, Intent(In) :: rank
       Character(80) :: OutFile, ReservOutFile, SpecialOutFile
-      
+
       INTEGER(4) remove  ! PHB added for system call
       LOGICAL(4) resul   ! PHB added for system call
 
       OutFile = GetFileDef('OutputFile')
       ReservOutFile = GetFileDef('ReserveFile')
-      SpecialOutFile = GetFileDef('OptionStudy') 
+      SpecialOutFile = GetFileDef('OptionStudy')
       If (rank .EQ. 0) Then
-          
+
 ! PHB comment out -- system calls are different with my compiler
 !  -- BKK added preprocessor macro elements to deal with different compilers
 #if defined (__GFORTRAN__)
@@ -2133,21 +2364,21 @@ implicit none
         call System("rm '" // Trim(OutputsDir) // "INFEAS.OUT'")
 
 #elif defined (__INTEL_COMPILER)
-! PHB try this instead:  
-        
+! PHB try this instead:
+
          remove = DELFILESQQ(Trim(OutputsDir) // 'allsys.out')
-         remove = DELFILESQQ(Trim(OutputsDir) // Trim(OutFile))        
-         remove = DELFILESQQ(Trim(OutputsDir) // Trim(ReservOutFile))        
-         remove = DELFILESQQ(Trim(OutputsDir) // Trim(SpecialOutFile))        
-         remove = DELFILESQQ(Trim(OutputsDir) // 'INFEAS.OUT')   
+         remove = DELFILESQQ(Trim(OutputsDir) // Trim(OutFile))
+         remove = DELFILESQQ(Trim(OutputsDir) // Trim(ReservOutFile))
+         remove = DELFILESQQ(Trim(OutputsDir) // Trim(SpecialOutFile))
+         remove = DELFILESQQ(Trim(OutputsDir) // 'INFEAS.OUT')
 #else
 #error "No compiler indicated!"
 #endif
-         
-! PHB comment out -- system calls are different with my compiler         
+
+! PHB comment out -- system calls are different with my compiler
 !  -- BKK added preprocessor macro elements to deal with different compilers
 #if defined (__GFORTRAN__)
-         
+
         call System("cat '" // Trim(OutputsDir) // "lpout/'* >> " // Trim(OutputsDir) // "allsys.out")
         call System("cat '" // Trim(OutputsDir) // "mpiout/" // Trim(OutFile) //"'* >> '" &
           & // Trim(OutputsDir) // Trim(OutFile) // "'")
@@ -2157,22 +2388,22 @@ implicit none
           & // Trim(OutputsDir) // Trim(SpecialOutFile) //  "'")
         call System("cat '" // Trim(OutputsDir) // "mpiout/INFEAS.OUT'* >> '" &
           & // Trim(OutputsDir) // "INFEAS.OUT'")
-        
+
 #elif defined (__INTEL_COMPILER)
-! PHB try this instead:          
-        
+! PHB try this instead:
+
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'lpout\*.out ' // Trim(OutputsDir) // 'allsys.out')
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\INFEAS.OUT* ' // Trim(OutputsDir) // 'INFEAS.OUT')
 
 ! PHB these user-specified filenames could have spaces in them, use double quotes or system might have trouble finding:
-        
+
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(OutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(OutFile) // '"')
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(ReservOutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(ReservOutFile) // '"')
         resul = SYSTEMQQ('copy ' // Trim(OutputsDir) // 'mpiout\"' // TRIM(SpecialOutFile) // '*" ' // Trim(OutputsDir) // '"' // Trim(SpecialOutFile) // '"')
 #else
 #error "No compiler indicated!"
 #endif
-        
+
       End If
 
     end subroutine
