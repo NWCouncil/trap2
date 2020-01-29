@@ -1,11 +1,11 @@
 "InputsDir","C:\Users\fazio\Documents\Git\trap2\inputs\"
 "OutputsDir","C:\Users\fazio\Documents\Git\trap2\outputs\"
-"BPAReguFile","BPAREGU 125Flex 1st.OUT"
-"FOR/MaintFile","FOR.DAT"
-"PlantParamsFile","SYSTEM BPA 125Flex Spill.DEF"
-"ReserveFile","trap 2023 2 Reserves.OUT"
-"OutputFile","Sust Peak 10hr Flex.OUT"
-"NumberofPkHours",10
-"OptionStudy","2023 Ref 4K-2hr"
-"LpFile","LP 2023.OUT"
+"BPAReguFile","BPAREGU CC A.OUT"
+"FOR/MaintFile","FOR CC.DAT"
+"PlantParamsFile","SYSTEM Base CC.DEF"
+"ReserveFile","trap reserves.OUT"
+"OutputFile","SustPeak 2 Test.OUT"
+"NumberofPkHours",2
+"OptionStudy","Trap Option.OUT"
+"LpFile","LP File.OUT"
 
