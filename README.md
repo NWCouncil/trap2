@@ -3,8 +3,10 @@ Trap 2
 
 An updated trap model using Fortran and lp_solve.
 
-Currently to install you need a Linux system with OpenMPI, lp_solve and gcc.  This 
-project does not have an installer yet so contact the Council if you are going to 
-attempt the install.
+Installing can be done on Windows and Linux.
 
-Testing uploading to the website to a new branch.
+For Windows, there is an MSI installer.
+
+To run TRAP with multiple cores:
+mpiexec -n {number of cores} trap2.exe
+
