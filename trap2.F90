@@ -1950,7 +1950,7 @@ implicit none
 #endif
 
       Integer, Intent(In) :: rank
-      Integer, Intent(Out) :: Iper, Iwyr
+      Integer, Intent(In) :: Iper, Iwyr
       Integer, Intent(In) :: sys
       Character(80), Intent(In) :: SolverFiles(80 * 14 * 4)
       Integer :: OutProfile

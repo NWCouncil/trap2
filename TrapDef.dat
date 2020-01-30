@@ -1,5 +1,5 @@
-"InputsDir","C:\Users\fazio\Documents\Git\trap2\inputs\"
-"OutputsDir","C:\Users\fazio\Documents\Git\trap2\outputs\"
+"InputsDir","inputs\"
+"OutputsDir","outputs\"
 "BPAReguFile","BPAREGU 125Flex 1st.OUT"
 "FOR/MaintFile","FOR.DAT"
 "PlantParamsFile","SYSTEM BPA 125Flex Spill.DEF"
