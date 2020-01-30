@@ -27,16 +27,12 @@
 		<Filter Name="Header Files" Filter="fi;fd"/>
 		<Filter Name="Resource Files" Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe">
 		<File RelativePath=".\.gitignore"/>
-		<File RelativePath=".\inputs\BPAREGU 2017 for TRAP.OUT"/>
-		<File RelativePath=".\inputs\BPAREGU 2019 for TRAP.OUT"/>
-		<File RelativePath=".\inputs\FOR.DAT"/>
-		<File RelativePath=".\inputs\FOR_rev.DAT"/>
-		<File RelativePath=".\inputs\FOR_rev_zero.DAT"/>
+		<File RelativePath=".\inputs\BPAREGU CC A.OUT"/>
+		<File RelativePath=".\inputs\FOR CC.dat"/>
 		<File RelativePath=".\LICENSE.md"/>
 		<File RelativePath=".\Makefile"/>
 		<File RelativePath=".\README.md"/>
-		<File RelativePath=".\inputs\SYSTEM 4K.DEF"/>
-		<File RelativePath=".\inputs\SYSTEM 4K_PHB_AVL.DAT"/>
+		<File RelativePath=".\inputs\SYSTEM Base CC.DEF"/>
 		<File RelativePath=".\TrapDef.dat"/>
 		<File RelativePath=".\WindowsIntelCompiling.md"/></Filter>
 		<Filter Name="Source Files" Filter="f90;for;f;fpp;ftn;def;odl;idl">
