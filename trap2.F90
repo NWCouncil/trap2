@@ -2088,8 +2088,13 @@ implicit none
       LpFile = GetFileDef('LpFile')
       Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // 'mpiout/' // Trim(LpFile) // '-', rank
       !Write(LpFile, '(A, I4.4)') Trim(OutputsDir) // Trim(LpFile)
-      Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
-      Write(101, Rec=sys) VarValue(1:(VarNum-1))
+
+      !Need to test if the first system(s) are infeasible to make sure there is
+      ! something to write.
+      If (RecLen .NE. 0) Then
+        Open(Unit=101, File=LpFile, Form='UNFORMATTED', Access='Direct', Recl=RecLen)
+        Write(101, Rec=sys) VarValue(1:(VarNum-1))
+      End If
 
       EastOnPeakCap = 0; EastOffPeakCap = 0; WestOnPeakCap = 0; WestOffPeakCap = 0;
       IdOnPeakCap = 0; IdOffPeakCap = 0;
