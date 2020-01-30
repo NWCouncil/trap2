@@ -1,5 +1,5 @@
-"InputsDir","C:\Users\fazio\Documents\Git\trap2\inputs\"
-"OutputsDir","C:\Users\fazio\Documents\Git\trap2\outputs\"
+"InputsDir","C:\nwcouncil.org\TRAP2CC\inputs\"
+"OutputsDir","C:\nwcouncil.org\TRAP2CC\outputs\"
 "BPAReguFile","BPAREGU CC A.OUT"
 "FOR/MaintFile","FOR CC.DAT"
 "PlantParamsFile","SYSTEM Base CC.DEF"

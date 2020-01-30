@@ -30,7 +30,10 @@
 		<File RelativePath=".\inputs\BPAREGU CC A.OUT"/>
 		<File RelativePath=".\inputs\FOR CC.dat"/>
 		<File RelativePath=".\LICENSE.md"/>
+		<File RelativePath=".\LPOUT.md"/>
 		<File RelativePath=".\Makefile"/>
+		<File RelativePath=".\MPIOut.md"/>
+		<File RelativePath=".\MPSOut.md"/>
 		<File RelativePath=".\README.md"/>
 		<File RelativePath=".\inputs\SYSTEM Base CC.DEF"/>
 		<File RelativePath=".\TrapDef.dat"/>
